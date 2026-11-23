@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+*.pyc
+fishing_auto_config_v5.json
+logs/
+debug/
