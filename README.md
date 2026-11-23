@@ -6,6 +6,8 @@
 
 NOXEN is a Python desktop application that reads selected Roblox UI regions and automates the fishing loop. The interface uses a Deep Navy / Teal dark theme.
 
+<img width="1529" height="860" alt="Fishing Auto JOODPHAKJAI" src="https://github.com/user-attachments/assets/9b5b01d5-0da1-4c47-84a1-25a04f2d9841" />
+
 ## Features
 
 - Detects the Roblox window automatically.
