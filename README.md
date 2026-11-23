@@ -86,3 +86,5 @@ Current source: **V5.3 Recovery — NOXEN Dark UI Edition**
 See [VERSION.txt](VERSION.txt) and [CHANGELOG_TH.txt](CHANGELOG_TH.txt).
 
 No license file is included at this time. All rights remain with the project author unless a license is added.
+
+[👉 Tutorial video.](https://vt.tiktok.com/ZSsNFh6jn/)
