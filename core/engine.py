@@ -229,6 +229,7 @@ class FishingEngine:
         recovery_attempt = 0
         started = time.monotonic()
         need_resync = False
+        next_resync_timeout: float | None = None
         self.log.info("V5.3 Recovery worker started (hwnd=%s)", self.hwnd)
         max_minutes = float(self.settings.get("max_run_minutes", 0))
         try:
@@ -243,10 +244,13 @@ class FishingEngine:
                         # This prevents an accidental second cast if the previous cast
                         # actually succeeded while the detector briefly lost the UI.
                         if need_resync:
-                            probe = max(0.5, float(self.settings.get("recovery_reacquire_seconds", 8.0)))
-                            self._event("phase", text="กำลังตรวจว่ามินิเกมเดิมยังเปิดอยู่หรือไม่")
+                            default_probe = float(self.settings.get("recovery_reacquire_seconds", 8.0))
+                            probe = max(0.5, float(next_resync_timeout if next_resync_timeout is not None else default_probe))
+                            self._event("phase", text=f"กำลังตรวจหามินิเกมเดิม (สูงสุด {probe:.0f} วินาที)")
+                            self.log.info("recovery resync scan started: timeout=%.1fs", probe)
                             found, _probe_message = self._wait_for_minigame(sct, timeout=probe)
                             need_resync = False
+                            next_resync_timeout = None
                             if found:
                                 self.log.info("recovery resync: existing minigame found; resume reel")
                                 success, message = self._play_minigame(sct)
@@ -275,6 +279,20 @@ class FishingEngine:
                                 if self.stop_event.is_set():
                                     break
                                 return f"หยุดหลังพยายามกู้คืน {recovery_attempt} ครั้ง: {message}"
+                            # If the cast was initiated but the charge meter was not
+                            # readable, the bite/minigame may still appear later. Use
+                            # the normal bite wait instead of the short 8s rescan, so
+                            # we do not issue another cast before the existing one resolves.
+                            if "ไม่พบแถบพลังในพื้นที่ B" in message:
+                                next_resync_timeout = max(
+                                    0.5, float(self.settings.get("bite_wait_seconds", 45.0))
+                                )
+                                self.log.warning(
+                                    "charge meter unreadable; extending minigame reacquire to bite wait %.1fs",
+                                    next_resync_timeout,
+                                )
+                            else:
+                                next_resync_timeout = None
                             need_resync = True
                             continue
 
@@ -407,6 +425,8 @@ class FishingEngine:
         poll = max(0.04, float(self.settings.get("poll_interval", 0.035)))
         started = time.monotonic()
         stable_frames = 0
+        progress_frames = 0
+        last_candidate_log = started
         self._event("phase", text="รอปลา / รอมินิเกมแบบ Fisch")
         while not self.stop_event.is_set() and time.monotonic() - started < timeout:
             self._check_active()
@@ -417,6 +437,8 @@ class FishingEngine:
             progress_value = detect_progress(progress)
             if control_bar is not None and fish_marker is not None:
                 stable_frames += 1
+                if progress_value is not None:
+                    progress_frames += 1
                 self._event(
                     "metrics",
                     bar_center=control_bar[0],
@@ -424,18 +446,29 @@ class FishingEngine:
                     fish_x=fish_marker[0],
                     progress=progress_value,
                 )
-                if stable_frames >= 2:
+                # The marker and a plausible-width bar must persist, and Progress
+                # must be readable in multiple samples. This avoids entering reel
+                # mode on bright scenery plus an unrelated cool-colored object.
+                if stable_frames >= 3 and progress_frames >= 2:
                     self.log.info(
-                        "Fisch-style minigame detected; control_bar center=%.1f width=%.1f fish=%.1f",
-                        control_bar[0], control_bar[1], fish_marker[0],
+                        "Fisch-style minigame confirmed; control_bar center=%.1f width=%.1f fish=%.1f progress=%.3f",
+                        control_bar[0], control_bar[1], fish_marker[0], progress_value,
                     )
-                    return True, "พบแถบควบคุมและตัวบอกตำแหน่งปลา"
+                    return True, "พบแถบควบคุม ตัวบอกปลา และ Progress ต่อเนื่อง"
+                if now := time.monotonic():
+                    if now - last_candidate_log >= 2.0:
+                        self.log.info(
+                            "minigame candidate waiting for confirmation: stable=%s progress_samples=%s latest_progress=%s bar_width=%.1f",
+                            stable_frames, progress_frames, progress_value, control_bar[1],
+                        )
+                        last_candidate_log = now
             else:
                 stable_frames = 0
+                progress_frames = 0
             time.sleep(poll * 2)
         if self.stop_event.is_set():
             return False, "ผู้ใช้สั่งหยุดขณะรอมินิเกม"
-        return False, "ไม่พบแถบควบคุม/ตัวบอกตำแหน่งปลา — ตรวจพื้นที่ C และจะลองใหม่อัตโนมัติ"
+        return False, "ไม่พบมินิเกมที่ยืนยันได้ (แถบควบคุม/ตัวบอกปลา/Progress) — ตรวจพื้นที่ C/D และจะลองใหม่อัตโนมัติ"
 
     def _play_minigame(self, sct: mss.mss) -> tuple[bool, str]:
         """Track the fish at a selectable rate; Progress is sampled less often."""
