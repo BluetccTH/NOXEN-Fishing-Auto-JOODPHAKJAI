@@ -163,15 +163,21 @@ class VisionTests(unittest.TestCase):
         self.assertFalse(fisch_should_hold(205, 200, 180, False))
 
     def test_fisch_detectors_separate_bar_and_fish_marker(self):
-        frame = np.full((70, 500, 3), (25, 25, 24), dtype=np.uint8)
-        frame[24:49, 35:235] = (230, 230, 230)  # wide control block
+        frame = np.full((70, 640, 3), (25, 25, 24), dtype=np.uint8)
+        frame[24:49, 35:179] = (230, 230, 230)  # realistic pale control block
         frame[10:60, 345:355] = (82, 88, 112)   # muted purple/blue fish marker
         bar = detect_control_bar(frame)
         fish = detect_fish_marker(frame)
         self.assertIsNotNone(bar)
         self.assertIsNotNone(fish)
-        self.assertAlmostEqual(bar[0], 135, delta=8)
+        self.assertAlmostEqual(bar[0], 107, delta=8)
         self.assertAlmostEqual(fish[0], 350, delta=5)
+
+    def test_control_bar_rejects_wide_scene_highlight(self):
+        frame = np.full((70, 640, 3), (25, 25, 24), dtype=np.uint8)
+        # A bright horizontal scene element much wider than the actual slider.
+        frame[24:49, 180:480] = (230, 230, 230)
+        self.assertIsNone(detect_control_bar(frame))
 
 
 if __name__ == "__main__":
