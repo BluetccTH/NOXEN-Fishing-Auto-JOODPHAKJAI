@@ -133,7 +133,7 @@ class FishingAutoBotV5:
             pass
 
         style.configure(".", background=colors["bg"], foreground=colors["text"],
-                        font=("Segoe UI", 10), bordercolor=colors["border"],
+                        font=("Segoe UI", 9), bordercolor=colors["border"],
                         lightcolor=colors["border"], darkcolor=colors["border"])
         style.configure("TFrame", background=colors["surface"])
         style.configure("TLabel", background=colors["surface"], foreground=colors["text"],
@@ -174,7 +174,7 @@ class FishingAutoBotV5:
                   bordercolor=[("focus", colors["accent"])])
         style.configure("TButton", background=colors["surface_alt"], foreground=colors["text"],
                         bordercolor=colors["border"], lightcolor=colors["border"],
-                        darkcolor=colors["border"], padding=(12, 8),
+                        darkcolor=colors["border"], padding=(10, 6),
                         font=("Segoe UI", 9, "bold"), relief="flat")
         style.map("TButton",
                   background=[("disabled", "#182235"), ("pressed", colors["panel"]),
@@ -296,7 +296,7 @@ class FishingAutoBotV5:
         ttk.Label(
             footer,
             textvariable=self.status_var,
-            wraplength=820,
+            wraplength=680,
             style="Muted.TLabel",
         ).pack(anchor="w", pady=(2, 0))
 
@@ -353,7 +353,7 @@ class FishingAutoBotV5:
             settings,
             text="Auto Repeat เปิดตลอด: จบรอบแล้วเริ่มตกปลาใหม่เอง • F6 เริ่ม  |  F7 หยุด  |  F8 เปิดแผงควบคุม",
             style="Success.TLabel",
-            wraplength=760,
+            wraplength=680,
         ).pack(anchor="w", pady=(7, 0))
 
         actions = ttk.LabelFrame(parent, text="ควบคุมบอท", padding=8)
@@ -394,7 +394,7 @@ class FishingAutoBotV5:
             parent,
             text="หมายเหตุ: ต้องเปิด Roblox ให้มองเห็นบนหน้าจอและอยู่หน้าสุดระหว่างบอททำงาน ไม่รองรับการควบคุมเกมเบื้องหลัง",
             style="Warning.TLabel",
-            wraplength=760,
+            wraplength=680,
         ).pack(anchor="w", pady=(8, 0))
 
     def _build_calibration_tab(self, parent: ttk.Frame) -> None:
@@ -402,7 +402,7 @@ class FishingAutoBotV5:
             parent,
             text="ตั้งค่าพื้นที่ครั้งแรกเพียงครั้งเดียว ระบบจะจำตำแหน่งแบบสัดส่วนของหน้าต่าง Roblox",
             style="Muted.TLabel",
-            wraplength=760,
+            wraplength=680,
         ).pack(anchor="w", pady=(0, 7))
 
         box = ttk.LabelFrame(parent, text="เลือกตำแหน่งบนหน้าจอเกม", padding=8)
@@ -441,7 +441,7 @@ class FishingAutoBotV5:
             tests,
             text="ทดสอบขณะ UI ที่ต้องการอ่านกำลังแสดงอยู่ หากหน้ามินิเกมยังไม่เปิด ค่าแถบควบคุม/ปลา/Progress อาจขึ้นว่าไม่พบได้ตามปกติ",
             style="Muted.TLabel",
-            wraplength=740,
+            wraplength=680,
         ).pack(anchor="w", pady=(7, 0))
 
     def _calibration_row(self, parent: ttk.Frame, label: str, key: str, button_text: str) -> None:
@@ -492,7 +492,7 @@ class FishingAutoBotV5:
             control,
             text="120 FPS = รอบอ่านเป้าหมายทุก 8.33 ms • Progress แยกอ่านประมาณ 20 FPS",
             style="Muted.TLabel",
-            wraplength=740,
+            wraplength=680,
         ).pack(anchor="w", pady=(2, 0))
         ttk.Checkbutton(
             control,
@@ -518,7 +518,7 @@ class FishingAutoBotV5:
             recovery,
             text="เมื่อเปิด Recovery จะลองใหม่ไม่จำกัดครั้ง (หยุดได้ด้วย F7) • เวลาพักเพิ่มตามจำนวนปัญหา และสแกนหามินิเกมเดิมได้ถึง 8 วินาที",
             style="Success.TLabel",
-            wraplength=740,
+            wraplength=680,
         ).pack(anchor="w", pady=(3, 0))
         ttk.Button(
             parent,
@@ -558,7 +558,7 @@ class FishingAutoBotV5:
             parent,
             text=text,
             justify="left",
-            wraplength=760,
+            wraplength=680,
         ).pack(anchor="nw", fill="both", expand=True)
     def _sync_form_from_config(self) -> None:
         s = self.cfg["settings"]
