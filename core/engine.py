@@ -10,7 +10,7 @@ from typing import Callable
 import mss
 import numpy as np
 
-from .config import tracking_interval
+from .config import TRACKING_FPS_OPTIONS, tracking_interval
 from .debug import save_debug_snapshot
 from .input_win import MouseController
 from .recovery import classify_failure, recovery_delay
@@ -451,6 +451,10 @@ class FishingEngine:
             0.025,
             min(0.25, float(self.settings.get("progress_poll_interval", 0.05))),
         )
+        auto_scale = bool(self.settings.get("tracking_auto_scale", True))
+        effective_fps = target_fps
+        overload_streak = 0
+        stable_since: float | None = None
         finish = float(self.settings.get("minigame_finish", 0.985))
         timeout = float(self.settings.get("minigame_timeout", 120.0))
         lookahead = max(0.0, float(self.settings.get("tracking_lookahead_seconds", 0.10)))
@@ -552,6 +556,39 @@ class FishingEngine:
                     fish_inside = (control_bar[0] - half <= fish_marker[0] <= control_bar[0] + half)
 
                 processing_ms = (time.perf_counter() - frame_started) * 1000.0
+                if auto_scale:
+                    frame_budget_ms = tracking_period * 1000.0
+                    if processing_ms > frame_budget_ms * 0.92:
+                        overload_streak += 1
+                    else:
+                        overload_streak = max(0, overload_streak - 1)
+
+                    slower_rates = [rate for rate in TRACKING_FPS_OPTIONS if rate < effective_fps and rate <= target_fps]
+                    if overload_streak >= 12 and slower_rates:
+                        effective_fps = max(slower_rates)
+                        tracking_period = tracking_interval(effective_fps)
+                        next_frame_deadline = time.perf_counter()
+                        overload_streak = 0
+                        stable_since = None
+                        self.log.warning("tracking auto-scale down: effective_fps=%s target_fps=%s", effective_fps, target_fps)
+                        self._event("phase", text=f"Tracking ปรับลดอัตโนมัติเป็น {effective_fps} FPS (เป้าหมาย {target_fps}) เพื่อให้ทันประมวลผล")
+                    elif effective_fps < target_fps:
+                        faster_rates = [rate for rate in TRACKING_FPS_OPTIONS if effective_fps < rate <= target_fps]
+                        next_rate = min(faster_rates) if faster_rates else effective_fps
+                        if next_rate > effective_fps and processing_ms < (1000.0 / next_rate) * 0.70:
+                            if stable_since is None:
+                                stable_since = now
+                            elif now - stable_since >= 5.0:
+                                effective_fps = next_rate
+                                tracking_period = tracking_interval(effective_fps)
+                                next_frame_deadline = time.perf_counter()
+                                stable_since = None
+                                overload_streak = 0
+                                self.log.info("tracking auto-scale up: effective_fps=%s target_fps=%s", effective_fps, target_fps)
+                                self._event("phase", text=f"เครื่องพร้อมแล้ว — เพิ่ม Tracking กลับเป็น {effective_fps} FPS")
+                        else:
+                            stable_since = None
+
                 if now - last_metrics_emit >= 0.10:
                     measured_fps = (
                         len(frame_intervals) / sum(frame_intervals)
@@ -566,6 +603,7 @@ class FishingEngine:
                         progress=progress,
                         tracking_fps=measured_fps,
                         tracking_target_fps=target_fps,
+                        tracking_effective_fps=effective_fps,
                         tracking_ms=processing_ms,
                     )
                     last_metrics_emit = now
@@ -576,8 +614,8 @@ class FishingEngine:
                         if frame_intervals and sum(frame_intervals) > 0 else 0.0
                     )
                     self.log.info(
-                        "tracking telemetry: actual=%.1f/target=%s FPS, processing=%.2fms, progress=%s",
-                        measured_fps, target_fps, processing_ms, progress,
+                        "tracking telemetry: actual=%.1f/effective=%s/target=%s FPS, processing=%.2fms, progress=%s",
+                        measured_fps, effective_fps, target_fps, processing_ms, progress,
                     )
                     last_telemetry_log = now
 
@@ -672,16 +710,16 @@ class FishingEngine:
                         if frame_intervals and sum(frame_intervals) > 0 else 0.0
                     )
                     self.log.info(
-                        "Fisch reel bar=%.1f width=%.1f fish=%.1f predicted=%.1f input=%s inside=%s progress=%s tracking=%.1f/%sFPS",
+                        "Fisch reel bar=%.1f width=%.1f fish=%.1f predicted=%.1f input=%s inside=%s progress=%s tracking=%.1f/%sFPS (cap %s)",
                         control_bar[0], control_bar[1], fish_x_now, fish_x_now + prediction_px,
                         "HOLD" if current_held else "RELEASE", fish_inside, progress,
-                        measured_fps, target_fps,
+                        measured_fps, effective_fps, target_fps,
                     )
                     self._event(
                         "phase",
                         text=("กำลังตามปลา — " + ("กดค้าง/เลื่อนไปขวา" if current_held else "ปล่อย/เลื่อนไปซ้าย")
                               + (" — ปลาอยู่ในแถบ" if fish_inside else " — กำลังปรับตำแหน่ง")
-                              + f" — Tracking {measured_fps:.0f}/{target_fps} FPS"),
+                              + f" — Tracking {measured_fps:.0f}/{effective_fps} FPS (cap {target_fps})"),
                     )
                     last_ui = now
                 wait_next_frame()
