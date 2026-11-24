@@ -56,6 +56,11 @@ class VisionTests(unittest.TestCase):
         self.assertIsNotNone(value)
         self.assertAlmostEqual(value, 0.70, delta=0.04)
 
+    def test_progress_rejects_tiny_residual_fill(self):
+        frame = np.full((24, 300, 3), (35, 30, 35), dtype=np.uint8)
+        frame[5:19, :12] = (255, 149, 112)  # 4% residual trace
+        self.assertIsNone(detect_progress(frame))
+
     def test_marker_still_detected_when_broad_lavender_reflection_overlaps(self):
         frame = np.full((130, 640, 3), (145, 105, 75), dtype=np.uint8)
         # A large low-saturation lavender reflection used to merge with the
@@ -177,6 +182,12 @@ class VisionTests(unittest.TestCase):
         frame = np.full((70, 640, 3), (25, 25, 24), dtype=np.uint8)
         # A bright horizontal scene element much wider than the actual slider.
         frame[24:49, 180:480] = (230, 230, 230)
+        self.assertIsNone(detect_control_bar(frame))
+
+    def test_control_bar_rejects_narrow_scene_highlight(self):
+        frame = np.full((70, 640, 3), (25, 25, 24), dtype=np.uint8)
+        # A narrow 82px highlight matched the previous 12%-of-crop floor.
+        frame[24:49, 35:117] = (230, 230, 230)
         self.assertIsNone(detect_control_bar(frame))
 
 
