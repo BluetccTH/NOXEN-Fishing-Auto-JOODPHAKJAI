@@ -124,7 +124,10 @@ def detect_control_bar(frame: np.ndarray) -> tuple[float, float] | None:
     if mask.size >= 7:
         smooth = np.convolve(mask.astype(np.float32), np.ones(5, dtype=np.float32) / 5.0, mode="same")
         mask = smooth >= 0.58
-    min_width = max(18, int(w * 0.12))
+    # Real control blocks in the supplied 640px slider crop are about 140-150px.
+    # Raise the floor to reject narrow scene highlights; subtract a small margin
+    # for smoothing so smaller synthetic/debug crops remain supported.
+    min_width = max(18, int(w * 0.17) - 8)
     # The in-game control block is substantially narrower than the full rail.
     # Wide bright scenery/overlays can otherwise be selected as a false bar.
     # Allow a few edge pixels added by profile smoothing, while still
@@ -364,7 +367,12 @@ def detect_progress(frame: np.ndarray) -> float | None:
         end += 1
     if end < max(5, int(w * 0.03)):
         return None
-    return float(np.clip(end / w, 0.0, 1.0))
+    value = float(np.clip(end / w, 0.0, 1.0))
+    # Tiny colored traces (about 3-6% of the strip) are commonly scene/UI
+    # remnants after the reel closes, not a live progress bar.
+    if value < 0.08:
+        return None
+    return value
 
 
 # Compatibility aliases for old debug/config code or snapshots.
