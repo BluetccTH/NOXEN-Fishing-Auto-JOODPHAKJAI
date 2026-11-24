@@ -2,7 +2,7 @@ import unittest
 import numpy as np
 
 from core.config import TRACKING_FPS_OPTIONS, tracking_interval
-from core.vision import detect_charge, detect_control_bar, detect_fish_marker, detect_handle_center, detect_progress, detect_target_center, fisch_edge_should_hold, fisch_should_hold
+from core.vision import detect_charge, detect_control_bar, detect_fish_marker, detect_handle_center, detect_progress, detect_target_center, fisch_edge_should_hold, fisch_should_hold, predict_fish_x, reel_completion_confirmed
 
 
 class VisionTests(unittest.TestCase):
@@ -78,6 +78,40 @@ class VisionTests(unittest.TestCase):
         marker = detect_fish_marker(frame, expected_x=410)
         self.assertIsNotNone(marker)
         self.assertAlmostEqual(marker[0], 410, delta=4)
+
+    def test_fish_prediction_is_bounded_and_clamped(self):
+        self.assertAlmostEqual(predict_fish_x(100, 200, 0.10, 500), 120.0)
+        self.assertEqual(predict_fish_x(-20, 0, 0.10, 500), 0.0)
+        self.assertEqual(predict_fish_x(520, 0, 0.10, 500), 499.0)
+        self.assertIsNone(predict_fish_x(100, 200, 0.30, 500))
+        self.assertIsNone(predict_fish_x(None, 200, 0.10, 500))
+
+    def test_reel_completion_requires_all_ui_elements_to_disappear(self):
+        options = dict(
+            progress_high_water=0.90,
+            disappear_progress=0.78,
+            absent_for=0.90,
+            confirm_seconds=0.55,
+        )
+        # A missing marker is only an occlusion when the control bar is still visible.
+        self.assertFalse(reel_completion_confirmed((200.0, 140.0), None, None, **options))
+        self.assertFalse(reel_completion_confirmed(None, (250.0, 20.0), None, **options))
+        self.assertFalse(reel_completion_confirmed(None, None, 0.30, **options))
+        self.assertFalse(reel_completion_confirmed(
+            None, None, None,
+            progress_high_water=0.70,
+            disappear_progress=0.78,
+            absent_for=0.90,
+            confirm_seconds=0.55,
+        ))
+        self.assertTrue(reel_completion_confirmed(None, None, None, **options))
+        self.assertFalse(reel_completion_confirmed(
+            None, None, None,
+            progress_high_water=0.90,
+            disappear_progress=0.78,
+            absent_for=0.30,
+            confirm_seconds=0.55,
+        ))
 
     def test_edge_tracker_switches_only_near_safe_zone_edges(self):
         # Stay with the current input while the fish is comfortably inside.
