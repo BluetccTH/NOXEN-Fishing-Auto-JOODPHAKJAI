@@ -6,6 +6,20 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+TRACKING_FPS_OPTIONS = (30, 60, 90, 120)
+
+
+def tracking_interval(fps: int | float | str) -> float:
+    """Return the target frame interval for a supported Tracking FPS."""
+    try:
+        numeric = float(fps)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Tracking FPS ต้องเป็น 30, 60, 90 หรือ 120") from exc
+    if not numeric.is_integer() or int(numeric) not in TRACKING_FPS_OPTIONS:
+        raise ValueError("Tracking FPS ต้องเป็น 30, 60, 90 หรือ 120")
+    return 1.0 / int(numeric)
+
+
 DEFAULT_CONFIG: dict[str, Any] = {
     "version": 5,
     "regions": {
@@ -30,6 +44,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "fish_lost_seconds": 1.5,
         "tracking_lookahead_seconds": 0.10,
         "tracking_deadband_ratio": 0.10,
+        "tracking_fps": 120,
+        "progress_poll_interval": 0.05,
         "minigame_disappear_success_progress": 0.78,
         "minigame_disappear_confirm_seconds": 0.55,
         "poll_interval": 0.035,
