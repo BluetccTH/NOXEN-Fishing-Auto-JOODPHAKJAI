@@ -14,7 +14,7 @@ from .config import TRACKING_FPS_OPTIONS, tracking_interval
 from .debug import save_debug_snapshot
 from .input_win import MouseController
 from .recovery import classify_failure, recovery_delay
-from .vision import detect_charge, detect_control_bar, detect_fish_marker, detect_progress, fisch_should_hold
+from .vision import detect_charge, detect_control_bar, detect_fish_marker, detect_progress, fisch_edge_should_hold
 from .win32 import (
     Rect,
     client_rect,
@@ -458,7 +458,7 @@ class FishingEngine:
         finish = float(self.settings.get("minigame_finish", 0.985))
         timeout = float(self.settings.get("minigame_timeout", 120.0))
         lookahead = max(0.0, float(self.settings.get("tracking_lookahead_seconds", 0.10)))
-        deadband_ratio = float(self.settings.get("tracking_deadband_ratio", 0.10))
+        edge_guard_ratio = float(self.settings.get("tracking_edge_guard_ratio", 0.78))
         bar_lost_limit = float(self.settings.get("bar_lost_seconds", 1.5))
         fish_lost_limit = float(self.settings.get("fish_lost_seconds", 1.5))
         disappear_progress = float(self.settings.get("minigame_disappear_success_progress", 0.78))
@@ -490,6 +490,9 @@ class FishingEngine:
         previous_fish_x: float | None = None
         previous_time = started
         fish_velocity = 0.0
+        previous_bar_x: float | None = None
+        previous_bar_time = started
+        bar_velocity = 0.0
         last_ui = 0.0
         last_metrics_emit = 0.0
         last_telemetry_log = started
@@ -528,7 +531,10 @@ class FishingEngine:
 
                 slider, slider_rect = self._grab_roi(sct, "slider")
                 control_bar = detect_control_bar(slider)
-                fish_marker = detect_fish_marker(slider)
+                expected_fish_x = None
+                if previous_fish_x is not None:
+                    expected_fish_x = previous_fish_x + fish_velocity * max(0.0, now - previous_time)
+                fish_marker = detect_fish_marker(slider, expected_x=expected_fish_x)
 
                 # The fish/slider need fast feedback. Progress changes much more slowly,
                 # so sample it independently to avoid a second screen capture every frame.
@@ -665,6 +671,15 @@ class FishingEngine:
                 last_bar_seen = now
 
                 if fish_marker is None:
+                    # Do not keep driving the slider blindly if the marker is
+                    # temporarily occluded. A short dropout is tolerated, then
+                    # the mouse is released while the detector reacquires it.
+                    if current_held and now - last_fish_seen >= max(0.12, tracking_period * 6.0):
+                        self._release()
+                        current_held = False
+                        fish_velocity = 0.0
+                        previous_fish_x = None
+                        self.log.warning("fish marker missing; released input while reacquiring")
                     if now - last_fish_seen > fish_lost_limit:
                         return False, "ตรวจไม่พบเส้นบอกตำแหน่งปลาต่อเนื่อง — พักแล้วตรวจใหม่"
                     wait_next_frame()
@@ -673,21 +688,37 @@ class FishingEngine:
 
                 fish_x_now = float(fish_marker[0])
                 if previous_fish_x is not None:
-                    dt = max(0.001, now - previous_time)
-                    raw_velocity = (fish_x_now - previous_fish_x) / dt
-                    raw_velocity = float(np.clip(raw_velocity, -1100.0, 1100.0))
-                    fish_velocity = 0.60 * fish_velocity + 0.40 * raw_velocity
-                prediction_px = float(np.clip(fish_velocity * lookahead, -42.0, 42.0))
+                    fish_dt = max(0.001, now - previous_time)
+                    if fish_dt <= 0.25:
+                        raw_velocity = (fish_x_now - previous_fish_x) / fish_dt
+                        raw_velocity = float(np.clip(raw_velocity, -1600.0, 1600.0))
+                        fish_velocity = 0.62 * fish_velocity + 0.38 * raw_velocity
+                    else:
+                        fish_velocity = 0.0
                 previous_fish_x = fish_x_now
                 previous_time = now
 
-                desired_held = fisch_should_hold(
+                bar_x_now = float(control_bar[0])
+                if previous_bar_x is not None:
+                    bar_dt = max(0.001, now - previous_bar_time)
+                    if bar_dt <= 0.25:
+                        raw_bar_velocity = (bar_x_now - previous_bar_x) / bar_dt
+                        raw_bar_velocity = float(np.clip(raw_bar_velocity, -1800.0, 1800.0))
+                        bar_velocity = 0.62 * bar_velocity + 0.38 * raw_bar_velocity
+                    else:
+                        bar_velocity = 0.0
+                previous_bar_x = bar_x_now
+                previous_bar_time = now
+
+                desired_held = fisch_edge_should_hold(
                     fish_x_now,
-                    float(control_bar[0]),
+                    bar_x_now,
                     float(control_bar[1]),
                     current_held,
-                    prediction_px=prediction_px,
-                    deadband_ratio=deadband_ratio,
+                    fish_velocity=fish_velocity,
+                    bar_velocity=bar_velocity,
+                    prediction_seconds=lookahead,
+                    edge_guard_ratio=edge_guard_ratio,
                 )
                 if desired_held != current_held:
                     self._check_active(force=True)
@@ -710,14 +741,14 @@ class FishingEngine:
                         if frame_intervals and sum(frame_intervals) > 0 else 0.0
                     )
                     self.log.info(
-                        "Fisch reel bar=%.1f width=%.1f fish=%.1f predicted=%.1f input=%s inside=%s progress=%s tracking=%.1f/%sFPS (cap %s)",
-                        control_bar[0], control_bar[1], fish_x_now, fish_x_now + prediction_px,
+                        "Fisch edge reel bar=%.1f width=%.1f fish=%.1f fish_v=%.1f bar_v=%.1f input=%s inside=%s progress=%s tracking=%.1f/%sFPS (cap %s)",
+                        control_bar[0], control_bar[1], fish_x_now, fish_velocity, bar_velocity,
                         "HOLD" if current_held else "RELEASE", fish_inside, progress,
                         measured_fps, effective_fps, target_fps,
                     )
                     self._event(
                         "phase",
-                        text=("กำลังตามปลา — " + ("กดค้าง/เลื่อนไปขวา" if current_held else "ปล่อย/เลื่อนไปซ้าย")
+                        text=("กำลังตามปลาแบบ Edge Tracking — " + ("กดค้าง/ขยับขวา" if current_held else "ปล่อย/ขยับซ้าย")
                               + (" — ปลาอยู่ในแถบ" if fish_inside else " — กำลังปรับตำแหน่ง")
                               + f" — Tracking {measured_fps:.0f}/{effective_fps} FPS (cap {target_fps})"),
                     )
