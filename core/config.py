@@ -44,6 +44,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "fish_lost_seconds": 1.5,
         "tracking_lookahead_seconds": 0.10,
         "tracking_deadband_ratio": 0.10,
+        "tracking_edge_guard_ratio": 0.78,
         "tracking_fps": 120,
         "tracking_auto_scale": True,
         "progress_poll_interval": 0.05,
