@@ -747,7 +747,8 @@ class FishingAutoBotV5:
                         target = int(payload.get("tracking_target_fps", 120))
                         self.tracking_fps_status_var.set(f"Tracking: {value:.1f}/{target} FPS")
                     if "tracking_ms" in payload:
-                        self.tracking_latency_status_var.set(f"Frame: {float(payload[\"tracking_ms\"]):.2f} ms")
+                        latency_ms = float(payload["tracking_ms"])
+                        self.tracking_latency_status_var.set(f"Frame: {latency_ms:.2f} ms")
                 elif kind == "round":
                     self.round_var.set(f"สำเร็จ {payload.get('count', 0)} รอบ")
                 elif kind == "status":
