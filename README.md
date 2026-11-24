@@ -1,6 +1,6 @@
 # [ NOXEN ] - Fishing Auto JOODPHAKJAI
 
-**Windows fishing automation prototype · V5.3 Recovery · Dark UI**
+**Windows fishing automation prototype · V5.4 Compact UI · Dark UI**
 
 [ภาษาไทย](README_TH.txt) · [Changelog](CHANGELOG_TH.txt)
 
@@ -82,7 +82,7 @@ python -m unittest discover -s tests -v
 
 ## Version
 
-Current source: **V5.3 Recovery — NOXEN Dark UI Edition**  
+Current source: **V5.4 Compact UI — NOXEN Dark UI Edition**  
 See [VERSION.txt](VERSION.txt) and [CHANGELOG_TH.txt](CHANGELOG_TH.txt).
 
 No license file is included at this time. All rights remain with the project author unless a license is added.

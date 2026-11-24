@@ -21,6 +21,7 @@ def tracking_interval(fps: int | float | str) -> float:
 
 
 DEFAULT_CONFIG: dict[str, Any] = {
+    # Config schema version (kept at 5 so existing V5.x calibration files remain compatible).
     "version": 5,
     "regions": {
         "cast_point": None,

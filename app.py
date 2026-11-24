@@ -31,10 +31,11 @@ from core.win32 import (
 )
 from ui.overlay import SelectionOverlay
 
+APP_VERSION = "V5.4"
 APP_DIR = Path(__file__).resolve().parent
 DEBUG_DIR = APP_DIR / "debug"
 LOG_DIR = APP_DIR / "logs"
-LOG_PATH = LOG_DIR / "fishing_auto_v5_3.log"
+LOG_PATH = LOG_DIR / "fishing_auto_v5_4.log"
 
 
 def setup_logging() -> None:
@@ -124,7 +125,7 @@ class FishingAutoBotV5:
         }
         self.colors = colors
         self.root.configure(background=colors["bg"])
-        self.root.option_add("*Font", ("Segoe UI", 10))
+        self.root.option_add("*Font", ("Segoe UI", 9))
         style = ttk.Style(self.root)
         try:
             style.theme_use("clam")
@@ -136,38 +137,39 @@ class FishingAutoBotV5:
                         lightcolor=colors["border"], darkcolor=colors["border"])
         style.configure("TFrame", background=colors["surface"])
         style.configure("TLabel", background=colors["surface"], foreground=colors["text"],
-                        font=("Segoe UI", 10))
-        style.configure("Title.TLabel", background=colors["surface"], foreground=colors["text"],
-                        font=("Segoe UI Semibold", 20, "bold"))
-        style.configure("Brand.TLabel", background=colors["surface"], foreground=colors["accent"],
-                        font=("Segoe UI Semibold", 20, "bold"))
-        style.configure("BrandName.TLabel", background=colors["surface"], foreground=colors["text"],
-                        font=("Segoe UI Semibold", 19, "bold"))
-        style.configure("Subtitle.TLabel", background=colors["surface"], foreground=colors["muted"],
                         font=("Segoe UI", 9))
+        style.configure("Title.TLabel", background=colors["surface"], foreground=colors["text"],
+                        font=("Segoe UI Semibold", 17, "bold"))
+        style.configure("Brand.TLabel", background=colors["surface"], foreground=colors["accent"],
+                        font=("Segoe UI Semibold", 17, "bold"))
+        style.configure("BrandName.TLabel", background=colors["surface"], foreground=colors["text"],
+                        font=("Segoe UI Semibold", 15, "bold"))
+        style.configure("Subtitle.TLabel", background=colors["surface"], foreground=colors["muted"],
+                        font=("Segoe UI", 8))
         style.configure("Muted.TLabel", background=colors["surface"], foreground=colors["muted"])
         style.configure("Success.TLabel", background=colors["surface"], foreground=colors["accent"])
         style.configure("Warning.TLabel", background=colors["surface"], foreground=colors["warning"])
         style.configure("Status.TLabel", background=colors["surface_alt"], foreground=colors["accent"],
-                        padding=(10, 5), font=("Segoe UI", 9, "bold"))
+                        padding=(8, 4), font=("Segoe UI", 8, "bold"))
         style.configure("TLabelframe", background=colors["surface"], foreground=colors["text"],
                         bordercolor=colors["border"], lightcolor=colors["border"],
                         darkcolor=colors["border"], relief="solid", borderwidth=1,
-                        padding=10)
+                        padding=8)
         style.configure("TLabelframe.Label", background=colors["surface"],
-                        foreground=colors["accent"], font=("Segoe UI Semibold", 10, "bold"))
+                        foreground=colors["accent"], font=("Segoe UI Semibold", 9, "bold"))
+        style.configure("Version.TLabel", background=colors["surface_alt"], foreground=colors["accent"], padding=(9, 4), font=("Segoe UI", 8, "bold"))
         style.configure("TNotebook", background=colors["bg"], borderwidth=0,
                         tabmargins=(2, 5, 2, 0))
         style.configure("TNotebook.Tab", background=colors["surface_alt"],
-                        foreground=colors["muted"], padding=(18, 10),
-                        font=("Segoe UI", 9, "bold"), borderwidth=0)
+                        foreground=colors["muted"], padding=(14, 7),
+                        font=("Segoe UI", 8, "bold"), borderwidth=0)
         style.map("TNotebook.Tab",
                   background=[("selected", colors["panel"]), ("active", colors["surface"])],
                   foreground=[("selected", colors["accent"]), ("active", colors["text"])])
         style.configure("TEntry", fieldbackground=colors["input"], foreground=colors["text"],
                         insertcolor=colors["text"], bordercolor=colors["border"],
                         lightcolor=colors["border"], darkcolor=colors["border"],
-                        padding=(8, 6), relief="flat")
+                        padding=(7, 4), relief="flat")
         style.map("TEntry", fieldbackground=[("focus", "#101d32")],
                   bordercolor=[("focus", colors["accent"])])
         style.configure("TButton", background=colors["surface_alt"], foreground=colors["text"],
@@ -180,14 +182,14 @@ class FishingAutoBotV5:
                   foreground=[("disabled", "#65758d"), ("active", colors["accent"])],
                   bordercolor=[("focus", colors["accent"])])
         style.configure("Primary.TButton", background="#147d70", foreground="#f4fffc",
-                        bordercolor="#249e8d", padding=(15, 10),
+                        bordercolor="#249e8d", padding=(11, 8),
                         font=("Segoe UI Semibold", 10, "bold"))
         style.map("Primary.TButton", background=[("disabled", "#243a48"),
                                                   ("pressed", "#0c655b"),
                                                   ("active", "#199887")],
                   foreground=[("disabled", "#8195a5"), ("active", "#ffffff")])
         style.configure("Danger.TButton", background="#572638", foreground="#ffdce3",
-                        bordercolor="#8c3b55", padding=(15, 10),
+                        bordercolor="#8c3b55", padding=(11, 8),
                         font=("Segoe UI Semibold", 10, "bold"))
         style.map("Danger.TButton", background=[("disabled", "#252333"),
                                                  ("pressed", "#66263c"),
@@ -200,152 +202,306 @@ class FishingAutoBotV5:
                   indicatorcolor=[("selected", colors["accent"]), ("!selected", colors["input"])])
         style.configure("TSeparator", background=colors["border"])
 
+    def _make_scrollable_tab(self, tab: ttk.Frame) -> ttk.Frame:
+        """Create a compact tab page that remains usable on smaller screens."""
+        shell = ttk.Frame(tab)
+        shell.pack(fill="both", expand=True)
+
+        canvas = tk.Canvas(shell, background=self.colors["surface"], highlightthickness=0, bd=0)
+        scrollbar = ttk.Scrollbar(shell, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        content = ttk.Frame(canvas, padding=9)
+        window_id = canvas.create_window((0, 0), window=content, anchor="nw")
+        content.bind(
+            "<Configure>",
+            lambda _event: canvas.configure(scrollregion=canvas.bbox("all")),
+        )
+        canvas.bind(
+            "<Configure>",
+            lambda event: canvas.itemconfigure(window_id, width=event.width),
+        )
+
+        def on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        canvas.bind("<Enter>", lambda _event: canvas.bind_all("<MouseWheel>", on_mousewheel))
+        canvas.bind("<Leave>", lambda _event: canvas.unbind_all("<MouseWheel>"))
+        return content
+
     def _build_ui(self) -> None:
         app_name = "[ NOXEN ] - Fishing Auto JOODPHAKJAI"
-        self.root.title(app_name)
-        self.root.geometry("1020x830")
-        self.root.minsize(900, 700)
+        self.root.title(f"{app_name} | {APP_VERSION}")
+        self.root.geometry("880x680")
+        self.root.minsize(760, 580)
 
-        outer = ttk.Frame(self.root, padding=18)
+        outer = ttk.Frame(self.root, padding=12)
         outer.pack(fill="both", expand=True)
+
         header = ttk.Frame(outer)
-        header.pack(fill="x", pady=(0, 12))
+        header.pack(fill="x", pady=(0, 7))
         brand_row = ttk.Frame(header)
         brand_row.pack(fill="x")
         ttk.Label(brand_row, text="[ NOXEN ]", style="Brand.TLabel").pack(side="left")
-        ttk.Label(brand_row, text=" - Fishing Auto JOODPHAKJAI", style="BrandName.TLabel").pack(side="left")
-        ttk.Label(header, text="AUTO CHARGE  •  CAST  •  FISCH REEL  •  AUTO REPEAT  •  SMART RECOVERY  /  V5.3",
-                  style="Subtitle.TLabel").pack(anchor="w", pady=(4, 8))
-        ttk.Label(header, textvariable=self.game_var, style="Status.TLabel").pack(anchor="e")
-        ttk.Separator(outer, orient="horizontal").pack(fill="x", pady=(0, 10))
+        ttk.Label(
+            brand_row,
+            text="  Fishing Auto JOODPHAKJAI",
+            style="BrandName.TLabel",
+        ).pack(side="left")
+        ttk.Label(brand_row, text=f"{APP_VERSION}  •  COMPACT UI", style="Version.TLabel").pack(side="right")
+
+        status_row = ttk.Frame(header)
+        status_row.pack(fill="x", pady=(3, 0))
+        ttk.Label(
+            status_row,
+            text="AUTO CHARGE  •  CAST  •  FISCH REEL  •  AUTO REPEAT  •  SMART RECOVERY",
+            style="Subtitle.TLabel",
+        ).pack(side="left", anchor="w")
+        ttk.Label(status_row, textvariable=self.game_var, style="Status.TLabel").pack(side="right")
+
+        ttk.Separator(outer, orient="horizontal").pack(fill="x", pady=(0, 7))
 
         self.tabs = ttk.Notebook(outer)
         self.tabs.pack(fill="both", expand=True)
-        self.control_tab = ttk.Frame(self.tabs, padding=12)
-        self.calibration_tab = ttk.Frame(self.tabs, padding=12)
-        self.advanced_tab = ttk.Frame(self.tabs, padding=12)
-        self.help_tab = ttk.Frame(self.tabs, padding=12)
+
+        self.control_tab = ttk.Frame(self.tabs)
+        self.calibration_tab = ttk.Frame(self.tabs)
+        self.advanced_tab = ttk.Frame(self.tabs)
+        self.help_tab = ttk.Frame(self.tabs)
         self.tabs.add(self.control_tab, text="ควบคุม")
         self.tabs.add(self.calibration_tab, text="ตั้งค่าพื้นที่")
         self.tabs.add(self.advanced_tab, text="ขั้นสูง")
         self.tabs.add(self.help_tab, text="วิธีใช้")
 
-        self._build_control_tab()
-        self._build_calibration_tab()
-        self._build_advanced_tab()
-        self._build_help_tab()
+        self.control_content = self._make_scrollable_tab(self.control_tab)
+        self.calibration_content = self._make_scrollable_tab(self.calibration_tab)
+        self.advanced_content = self._make_scrollable_tab(self.advanced_tab)
+        self.help_content = self._make_scrollable_tab(self.help_tab)
+
+        self._build_control_tab(self.control_content)
+        self._build_calibration_tab(self.calibration_content)
+        self._build_advanced_tab(self.advanced_content)
+        self._build_help_tab(self.help_content)
 
         footer = ttk.Frame(outer)
-        footer.pack(fill="x", pady=(9, 0))
-        ttk.Label(footer, textvariable=self.phase_var, font=("Segoe UI", 10, "bold"), style="Brand.TLabel").pack(anchor="w")
-        ttk.Label(footer, textvariable=self.status_var, wraplength=940, style="Muted.TLabel").pack(anchor="w", pady=(3, 0))
+        footer.pack(fill="x", pady=(6, 0))
+        ttk.Label(
+            footer,
+            textvariable=self.phase_var,
+            font=("Segoe UI Semibold", 9, "bold"),
+            style="Brand.TLabel",
+        ).pack(anchor="w")
+        ttk.Label(
+            footer,
+            textvariable=self.status_var,
+            wraplength=820,
+            style="Muted.TLabel",
+        ).pack(anchor="w", pady=(2, 0))
 
-    def _build_control_tab(self) -> None:
-        top = ttk.LabelFrame(self.control_tab, text="สถานะการทำงาน", padding=12)
-        top.pack(fill="x")
-        for var in (self.charge_var, self.target_var, self.handle_var, self.progress_var,
-                    self.tracking_fps_status_var, self.tracking_latency_status_var):
-            ttk.Label(top, textvariable=var, font=("Segoe UI", 11)).pack(anchor="w", pady=2)
-        ttk.Label(top, textvariable=self.round_var, style="Success.TLabel").pack(anchor="w", pady=(5, 0))
+    def _build_control_tab(self, parent: ttk.Frame) -> None:
+        status = ttk.LabelFrame(parent, text="สถานะการทำงาน", padding=8)
+        status.pack(fill="x")
 
-        settings = ttk.LabelFrame(self.control_tab, text="ตั้งค่าหลัก", padding=12)
-        settings.pack(fill="x", pady=(10, 0))
-        row = ttk.Frame(settings)
-        row.pack(fill="x", pady=3)
-        ttk.Label(row, text="ปล่อยเบ็ดเมื่อ Charge ถึง", width=26).pack(side="left")
-        ttk.Entry(row, textvariable=self.charge_target_var, width=8).pack(side="left")
-        ttk.Label(row, text="%", padding=(4, 0)).pack(side="left")
-        ttk.Label(row, text="จบมินิเกมเมื่อ Progress ถึง", padding=(22, 0, 5, 0)).pack(side="left")
-        ttk.Entry(row, textvariable=self.finish_var, width=8).pack(side="left")
-        ttk.Label(row, text="%").pack(side="left")
-        ttk.Label(settings, text="โหมดตกปลาอัตโนมัติ: เปิดตลอด — วนเหวี่ยงเบ็ดใหม่หลังจบแต่ละรอบ จนกด F7 หรือปิดโปรแกรม",
-                  style="Success.TLabel", wraplength=880).pack(anchor="w", pady=(7, 0))
+        metrics = (
+            self.charge_var,
+            self.target_var,
+            self.handle_var,
+            self.progress_var,
+            self.tracking_fps_status_var,
+            self.tracking_latency_status_var,
+        )
+        for index, variable in enumerate(metrics):
+            ttk.Label(
+                status,
+                textvariable=variable,
+                font=("Segoe UI", 9),
+            ).grid(
+                row=index // 2,
+                column=index % 2,
+                sticky="w",
+                padx=(5, 12),
+                pady=3,
+            )
+        status.columnconfigure(0, weight=1)
+        status.columnconfigure(1, weight=1)
+        ttk.Label(status, textvariable=self.round_var, style="Success.TLabel").grid(
+            row=3, column=0, columnspan=2, sticky="w", padx=5, pady=(4, 0)
+        )
 
-        actions = ttk.LabelFrame(self.control_tab, text="ควบคุมบอท", padding=12)
-        actions.pack(fill="x", pady=(10, 0))
-        row = ttk.Frame(actions)
-        row.pack(fill="x")
-        self.start_btn = ttk.Button(row, text="เริ่มตกปลาอัตโนมัติ  [F6]", command=self.start, style="Primary.TButton")
-        self.start_btn.pack(side="left", fill="x", expand=True, padx=(0, 5), ipady=7)
-        self.stop_btn = ttk.Button(row, text="หยุดฉุกเฉิน  [F7]", command=self.stop, state="disabled", style="Danger.TButton")
-        self.stop_btn.pack(side="left", fill="x", expand=True, padx=(5, 0), ipady=7)
-        row2 = ttk.Frame(actions)
-        row2.pack(fill="x", pady=(8, 0))
-        ttk.Button(row2, text="ซ่อนแผงควบคุม  [F8]", command=self.hide_panel).pack(side="left")
-        ttk.Button(row2, text="บันทึกการตั้งค่า", command=self.save_settings).pack(side="left", padx=7)
-        ttk.Button(row2, text="เปิด Log", command=self.open_log).pack(side="left")
+        settings = ttk.LabelFrame(parent, text="ตั้งค่าหลัก", padding=8)
+        settings.pack(fill="x", pady=(8, 0))
+        fields = ttk.Frame(settings)
+        fields.pack(fill="x")
+        fields.columnconfigure(0, weight=1)
+        fields.columnconfigure(1, weight=1)
 
-        note = ttk.Label(self.control_tab,
-                         text="หมายเหตุ: Roblox ต้องเปิดและมองเห็นบนหน้าจอขณะบอททำงาน ไม่รองรับการย่อเกมจริงหรือควบคุมเกมเบื้องหลัง",
-                         style="Warning.TLabel", wraplength=880)
-        note.pack(anchor="w", pady=(12, 0))
+        for column, (label, variable) in enumerate((
+            ("ปล่อยเบ็ดเมื่อ Charge ถึง", self.charge_target_var),
+            ("จบมินิเกมเมื่อ Progress ถึง", self.finish_var),
+        )):
+            field = ttk.Frame(fields)
+            field.grid(row=0, column=column, sticky="ew", padx=(3, 8) if column == 0 else (8, 3))
+            ttk.Label(field, text=label, style="Muted.TLabel").pack(anchor="w", pady=(0, 3))
+            entry_row = ttk.Frame(field)
+            entry_row.pack(anchor="w")
+            ttk.Entry(entry_row, textvariable=variable, width=8).pack(side="left")
+            ttk.Label(entry_row, text="%", padding=(5, 0)).pack(side="left")
 
-    def _build_calibration_tab(self) -> None:
-        ttk.Label(self.calibration_tab,
-                  text="พื้นที่จะบันทึกเป็นสัดส่วนของหน้าต่าง Roblox จึงรองรับการย้าย/ปรับขนาดหน้าต่างได้",
-                  style="Muted.TLabel", wraplength=900).pack(anchor="w", pady=(0, 10))
-        box = ttk.LabelFrame(self.calibration_tab, text="เลือกตำแหน่งบนหน้าจอเกม", padding=10)
+        ttk.Label(
+            settings,
+            text="Auto Repeat เปิดตลอด: จบรอบแล้วเริ่มตกปลาใหม่เอง • F6 เริ่ม  |  F7 หยุด  |  F8 เปิดแผงควบคุม",
+            style="Success.TLabel",
+            wraplength=760,
+        ).pack(anchor="w", pady=(7, 0))
+
+        actions = ttk.LabelFrame(parent, text="ควบคุมบอท", padding=8)
+        actions.pack(fill="x", pady=(8, 0))
+        action_row = ttk.Frame(actions)
+        action_row.pack(fill="x")
+        self.start_btn = ttk.Button(
+            action_row,
+            text="▶  เริ่มตกปลาอัตโนมัติ  [F6]",
+            command=self.start,
+            style="Primary.TButton",
+        )
+        self.start_btn.pack(side="left", fill="x", expand=True, padx=(0, 4), ipady=4)
+        self.stop_btn = ttk.Button(
+            action_row,
+            text="■  หยุดฉุกเฉิน  [F7]",
+            command=self.stop,
+            state="disabled",
+            style="Danger.TButton",
+        )
+        self.stop_btn.pack(side="left", fill="x", expand=True, padx=(4, 0), ipady=4)
+
+        tools_row = ttk.Frame(actions)
+        tools_row.pack(fill="x", pady=(7, 0))
+        for column in range(3):
+            tools_row.columnconfigure(column, weight=1)
+        ttk.Button(
+            tools_row, text="ซ่อนแผงควบคุม [F8]", command=self.hide_panel
+        ).grid(row=0, column=0, sticky="ew", padx=(0, 3))
+        ttk.Button(
+            tools_row, text="บันทึกการตั้งค่า", command=self.save_settings
+        ).grid(row=0, column=1, sticky="ew", padx=3)
+        ttk.Button(
+            tools_row, text="เปิด Log", command=self.open_log
+        ).grid(row=0, column=2, sticky="ew", padx=(3, 0))
+
+        ttk.Label(
+            parent,
+            text="หมายเหตุ: ต้องเปิด Roblox ให้มองเห็นบนหน้าจอและอยู่หน้าสุดระหว่างบอททำงาน ไม่รองรับการควบคุมเกมเบื้องหลัง",
+            style="Warning.TLabel",
+            wraplength=760,
+        ).pack(anchor="w", pady=(8, 0))
+
+    def _build_calibration_tab(self, parent: ttk.Frame) -> None:
+        ttk.Label(
+            parent,
+            text="ตั้งค่าพื้นที่ครั้งแรกเพียงครั้งเดียว ระบบจะจำตำแหน่งแบบสัดส่วนของหน้าต่าง Roblox",
+            style="Muted.TLabel",
+            wraplength=760,
+        ).pack(anchor="w", pady=(0, 7))
+
+        box = ttk.LabelFrame(parent, text="เลือกตำแหน่งบนหน้าจอเกม", padding=8)
         box.pack(fill="x")
         self._calibration_row(box, "A. จุดคลิกชาร์จและเหวี่ยงเบ็ด", "cast_point", "เลือกจุด")
         self._calibration_row(box, "B. แถบพลังแนวตั้งสีเขียว/ขาว", "charge", "เลือกกรอบ")
-        self._calibration_row(box, "C. ราง Click & Hold รวมแท่งม่วง", "slider", "เลือกกรอบ")
+        self._calibration_row(box, "C. รางมินิเกมและแท่งบอกปลา", "slider", "เลือกกรอบ")
         self._calibration_row(box, "D. แถบ Progress ด้านล่าง", "progress", "เลือกกรอบ")
 
-        tests = ttk.LabelFrame(self.calibration_tab, text="ทดสอบและวิเคราะห์ภาพ", padding=10)
-        tests.pack(fill="x", pady=(10, 0))
-        row = ttk.Frame(tests)
-        row.pack(fill="x")
-        ttk.Button(row, text="ทดสอบการอ่านแถบ", command=self.test_vision_now).pack(side="left")
-        ttk.Button(row, text="บันทึก Debug Snapshot", command=self.snapshot_now).pack(side="left", padx=7)
-        ttk.Button(row, text="เปิดโฟลเดอร์ Debug", command=self.open_debug_folder).pack(side="left")
-        ttk.Button(row, text="ส่งออก/สำรองค่า", command=self.export_config).pack(side="left", padx=(7, 0))
-        ttk.Button(row, text="นำเข้าค่าที่สำรอง", command=self.import_config).pack(side="left", padx=7)
-        ttk.Label(tests,
-                  text="การทดสอบจะแสดงค่าที่อ่านได้จากภาพ ณ ขณะนั้น หากหน้ามินิเกมยังไม่เปิด แถบควบคุม/ตำแหน่งปลา/Progress อาจขึ้นว่าไม่พบได้ตามปกติ",
-                  style="Muted.TLabel", wraplength=900).pack(anchor="w", pady=(8, 0))
+        tests = ttk.LabelFrame(parent, text="ทดสอบและจัดการข้อมูล", padding=8)
+        tests.pack(fill="x", pady=(8, 0))
+        first_row = ttk.Frame(tests)
+        first_row.pack(fill="x")
+        ttk.Button(
+            first_row, text="ทดสอบการอ่านแถบ", command=self.test_vision_now
+        ).pack(side="left", fill="x", expand=True, padx=(0, 3))
+        ttk.Button(
+            first_row, text="บันทึก Debug Snapshot", command=self.snapshot_now
+        ).pack(side="left", fill="x", expand=True, padx=(3, 0))
 
-    def _calibration_row(self, parent, label: str, key: str, button_text: str) -> None:
+        second_row = ttk.Frame(tests)
+        second_row.pack(fill="x", pady=(6, 0))
+        for column in range(3):
+            second_row.columnconfigure(column, weight=1)
+        ttk.Button(
+            second_row, text="เปิดโฟลเดอร์ Debug", command=self.open_debug_folder
+        ).grid(row=0, column=0, sticky="ew", padx=(0, 3))
+        ttk.Button(
+            second_row, text="ส่งออก/สำรองค่า", command=self.export_config
+        ).grid(row=0, column=1, sticky="ew", padx=3)
+        ttk.Button(
+            second_row, text="นำเข้าค่าที่สำรอง", command=self.import_config
+        ).grid(row=0, column=2, sticky="ew", padx=(3, 0))
+
+        ttk.Label(
+            tests,
+            text="ทดสอบขณะ UI ที่ต้องการอ่านกำลังแสดงอยู่ หากหน้ามินิเกมยังไม่เปิด ค่าแถบควบคุม/ปลา/Progress อาจขึ้นว่าไม่พบได้ตามปกติ",
+            style="Muted.TLabel",
+            wraplength=740,
+        ).pack(anchor="w", pady=(7, 0))
+
+    def _calibration_row(self, parent: ttk.Frame, label: str, key: str, button_text: str) -> None:
         row = ttk.Frame(parent)
-        row.pack(fill="x", pady=5)
-        ttk.Label(row, text=label, width=34).pack(side="left")
-        ttk.Label(row, textvariable=self.calibration_vars[key], width=26, style="Muted.TLabel").pack(side="left", padx=5)
-        ttk.Button(row, text=button_text, command=lambda k=key: self.pick_region(k)).pack(side="right")
+        row.pack(fill="x", pady=3)
+        ttk.Label(row, text=label, width=30).pack(side="left")
+        ttk.Label(
+            row,
+            textvariable=self.calibration_vars[key],
+            width=22,
+            style="Muted.TLabel",
+        ).pack(side="left", padx=5)
+        ttk.Button(
+            row,
+            text=button_text,
+            command=lambda selected=key: self.pick_region(selected),
+        ).pack(side="right")
 
-    def _build_advanced_tab(self) -> None:
-        box = ttk.LabelFrame(self.advanced_tab, text="การชาร์จและเวลาสำรอง", padding=10)
+    def _build_advanced_tab(self, parent: ttk.Frame) -> None:
+        box = ttk.LabelFrame(parent, text="การชาร์จและเวลาสำรอง", padding=8)
         box.pack(fill="x")
         self._entry_row(box, "เวลาสำรองเมื่ออ่านแถบไม่ได้ (วินาที)", self.fallback_var)
-        ttk.Checkbutton(box, text="อนุญาตให้ปล่อยเบ็ดตามเวลาสำรอง (เสี่ยงปล่อยไม่ตรงพลัง)",
-                        variable=self.fallback_enabled_var).pack(anchor="w", pady=(4, 2))
+        ttk.Checkbutton(
+            box,
+            text="อนุญาตให้ปล่อยเบ็ดตามเวลาสำรอง (เสี่ยงปล่อยไม่ตรงพลัง)",
+            variable=self.fallback_enabled_var,
+        ).pack(anchor="w", pady=(3, 2))
         self._entry_row(box, "เวลาสูงสุดในการชาร์จ (วินาที)", self.charge_timeout_var)
         self._entry_row(box, "เวลารอปลา/มินิเกม (วินาที)", self.bite_wait_var)
         self._entry_row(box, "เวลาสูงสุดต่อมินิเกม (วินาที)", self.minigame_timeout_var)
 
-        control = ttk.LabelFrame(self.advanced_tab, text="การควบคุมเมาส์และภาพ", padding=10)
-        control.pack(fill="x", pady=(10, 0))
+        control = ttk.LabelFrame(parent, text="การควบคุมเมาส์และภาพ", padding=8)
+        control.pack(fill="x", pady=(8, 0))
         self._entry_row(control, "จุดสลับทิศเมื่อปลาเข้าใกล้ขอบ (% ของครึ่งแถบ)", self.deadband_var)
         self._entry_row(control, "คาดการณ์การเคลื่อนที่ล่วงหน้า (วินาที)", self.lookahead_var)
         self._entry_row(control, "ช่วงตรวจจับงานทั่วไป (มิลลิวินาที)", self.poll_var)
         tracking_row = ttk.Frame(control)
-        tracking_row.pack(fill="x", pady=4)
-        ttk.Label(tracking_row, text="Tracking FPS (เฉพาะมินิเกม)", width=43).pack(side="left")
+        tracking_row.pack(fill="x", pady=3)
+        ttk.Label(tracking_row, text="Tracking FPS (เฉพาะมินิเกม)", width=38).pack(side="left")
         ttk.Combobox(
             tracking_row,
             textvariable=self.tracking_fps_var,
             values=tuple(str(rate) for rate in TRACKING_FPS_OPTIONS),
-            width=9,
+            width=8,
             state="readonly",
         ).pack(side="left")
-        ttk.Label(control, text="120 FPS = รอบอ่านทุก 8.33 ms • Progress แยกอ่านประมาณ 20 FPS",
-                  style="Muted.TLabel").pack(anchor="w", pady=(2, 0))
+        ttk.Label(
+            control,
+            text="120 FPS = รอบอ่านเป้าหมายทุก 8.33 ms • Progress แยกอ่านประมาณ 20 FPS",
+            style="Muted.TLabel",
+            wraplength=740,
+        ).pack(anchor="w", pady=(2, 0))
         ttk.Checkbutton(
             control,
             text="ปรับ FPS อัตโนมัติเมื่อเครื่องประมวลผลไม่ทัน และเพิ่มกลับเมื่อพร้อม",
             variable=self.tracking_auto_scale_var,
         ).pack(anchor="w", pady=(3, 0))
 
-        recovery = ttk.LabelFrame(self.advanced_tab, text="ระบบกู้คืนอัตโนมัติ (Recovery)", padding=10)
-        recovery.pack(fill="x", pady=(10, 0))
+        recovery = ttk.LabelFrame(parent, text="ระบบกู้คืนอัตโนมัติ (Recovery)", padding=8)
+        recovery.pack(fill="x", pady=(8, 0))
         ttk.Checkbutton(
             recovery,
             text="เมื่ออ่านแถบไม่พบ / มินิเกมหาย / ตรวจจับปลาขาดช่วง ให้พักแล้วลองตรวจใหม่อัตโนมัติ",
@@ -357,23 +513,28 @@ class FishingAutoBotV5:
             recovery,
             text="ถ้า Roblox ถูกย่อหรือเสียโฟกัส ให้ปล่อยเมาส์และรอจนกลับมาอยู่หน้าสุด แล้วทำต่อ",
             variable=self.wait_for_focus_var,
-        ).pack(anchor="w", pady=(4, 2))
+        ).pack(anchor="w", pady=(3, 2))
         ttk.Label(
             recovery,
             text="เมื่อเปิด Recovery จะลองใหม่ไม่จำกัดครั้ง (หยุดได้ด้วย F7) • เวลาพักเพิ่มตามจำนวนปัญหา และสแกนหามินิเกมเดิมได้ถึง 8 วินาที",
-            style="Success.TLabel", wraplength=900,
+            style="Success.TLabel",
+            wraplength=740,
         ).pack(anchor="w", pady=(3, 0))
-        ttk.Button(self.advanced_tab, text="บันทึกการตั้งค่าขั้นสูง", command=self.save_settings).pack(anchor="e", pady=(10, 0))
+        ttk.Button(
+            parent,
+            text="บันทึกการตั้งค่าขั้นสูง",
+            command=self.save_settings,
+        ).pack(anchor="e", pady=(8, 0))
 
-    def _entry_row(self, parent, label: str, variable: tk.StringVar) -> None:
+    def _entry_row(self, parent: ttk.Frame, label: str, variable: tk.StringVar) -> None:
         row = ttk.Frame(parent)
-        row.pack(fill="x", pady=4)
-        ttk.Label(row, text=label, width=43).pack(side="left")
-        ttk.Entry(row, textvariable=variable, width=12).pack(side="left")
+        row.pack(fill="x", pady=2)
+        ttk.Label(row, text=label, width=38).pack(side="left")
+        ttk.Entry(row, textvariable=variable, width=10).pack(side="left")
 
-    def _build_help_tab(self) -> None:
+    def _build_help_tab(self, parent: ttk.Frame) -> None:
         text = (
-            "[ NOXEN ] - Fishing Auto JOODPHAKJAI / V5.3 Recovery — Fisch-style Reel\n\n"
+            f"[ NOXEN ] - Fishing Auto JOODPHAKJAI / {APP_VERSION} Compact UI — Fisch-style Reel\n\n"
             "1. เปิด Roblox และให้หน้าต่างเกมอยู่บนหน้าจอ ห้ามย่อเกม\n"
             "2. พื้นที่ A: เลือกจุดบนผิวน้ำที่ต้องการเหวี่ยงเบ็ด\n"
             "3. พื้นที่ B: ครอบแถบชาร์จแนวตั้งทั้งแท่ง โดยต้องเห็นส่วนสีเขียว/เหลืองด้านบนและส่วนเติมสีขาวด้านล่าง\n"
@@ -393,9 +554,12 @@ class FishingAutoBotV5:
             "• หากสลับหน้าต่างหรือย่อ Roblox บอทจะปล่อยเมาส์และรอจนผู้ใช้กลับมาเปิด Roblox ไว้หน้าสุด จากนั้นตรวจ UI เดิมก่อนตัดสินใจชาร์จใหม่\n"
             "• F7 หยุดทันที; F8 เปิดแผงควบคุมและหยุดบอท\n"
         )
-        ttk.Label(self.help_tab, text=text, justify="left", wraplength=800).pack(anchor="nw", fill="both", expand=True)
-
-    # ----------------------------- Config --------------------------------
+        ttk.Label(
+            parent,
+            text=text,
+            justify="left",
+            wraplength=760,
+        ).pack(anchor="nw", fill="both", expand=True)
     def _sync_form_from_config(self) -> None:
         s = self.cfg["settings"]
         self.charge_target_var.set(str(round(float(s["charge_target"]) * 100, 1)))
@@ -693,7 +857,7 @@ class FishingAutoBotV5:
             result = engine.run()
             self.events.put(("done", {"result": result}))
 
-        self.worker = threading.Thread(target=worker_main, name="FishingBotV53RecoveryWorker", daemon=True)
+        self.worker = threading.Thread(target=worker_main, name="FishingBotV54CompactRecoveryWorker", daemon=True)
         self.worker.start()
         logging.getLogger("FishingAutoBotV5").info("Start clicked; window=%s", self.game_title)
 
@@ -809,7 +973,7 @@ class FishingAutoBotV5:
             path = filedialog.asksaveasfilename(
                 parent=self.root, title="สำรองการตั้งค่า [ NOXEN ] - Fishing Auto JOODPHAKJAI",
                 defaultextension=".json", filetypes=[("JSON config", "*.json")],
-                initialfile="noxen_fishing_auto_v5_3_backup.json")
+                initialfile="noxen_fishing_auto_v5_4_backup.json")
             if not path:
                 return
             Path(path).write_text(json.dumps(self.cfg, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -842,7 +1006,7 @@ class FishingAutoBotV5:
     def open_log(self) -> None:
         LOG_DIR.mkdir(exist_ok=True)
         if not LOG_PATH.exists():
-            LOG_PATH.write_text("[ NOXEN ] - Fishing Auto JOODPHAKJAI / V5.3 Recovery log\n", encoding="utf-8")
+            LOG_PATH.write_text(f"[ NOXEN ] - Fishing Auto JOODPHAKJAI / {APP_VERSION} Recovery log\n", encoding="utf-8")
         try:
             os.startfile(str(LOG_PATH))
         except Exception as exc:
