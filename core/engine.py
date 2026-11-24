@@ -426,6 +426,7 @@ class FishingEngine:
         started = time.monotonic()
         stable_frames = 0
         progress_frames = 0
+        min_start_progress = 0.12
         last_candidate_log = started
         self._event("phase", text="รอปลา / รอมินิเกมแบบ Fisch")
         while not self.stop_event.is_set() and time.monotonic() - started < timeout:
@@ -437,8 +438,12 @@ class FishingEngine:
             progress_value = detect_progress(progress)
             if control_bar is not None and fish_marker is not None:
                 stable_frames += 1
-                if progress_value is not None:
+                if progress_value is not None and progress_value >= min_start_progress:
                     progress_frames += 1
+                else:
+                    # Require consecutive plausible Progress samples. A tiny
+                    # residual fill after an old reel must not start a new one.
+                    progress_frames = 0
                 self._event(
                     "metrics",
                     bar_center=control_bar[0],
