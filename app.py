@@ -31,11 +31,11 @@ from core.win32 import (
 )
 from ui.overlay import SelectionOverlay
 
-APP_VERSION = "V5.4"
+APP_VERSION = "V5.5"
 APP_DIR = Path(__file__).resolve().parent
 DEBUG_DIR = APP_DIR / "debug"
 LOG_DIR = APP_DIR / "logs"
-LOG_PATH = LOG_DIR / "fishing_auto_v5_4.log"
+LOG_PATH = LOG_DIR / "fishing_auto_v5_5.log"
 
 
 def setup_logging() -> None:
@@ -857,7 +857,7 @@ class FishingAutoBotV5:
             result = engine.run()
             self.events.put(("done", {"result": result}))
 
-        self.worker = threading.Thread(target=worker_main, name="FishingBotV54CompactRecoveryWorker", daemon=True)
+        self.worker = threading.Thread(target=worker_main, name="FishingBotV55WideBarRecoveryWorker", daemon=True)
         self.worker.start()
         logging.getLogger("FishingAutoBotV5").info("Start clicked; window=%s", self.game_title)
 
@@ -973,7 +973,7 @@ class FishingAutoBotV5:
             path = filedialog.asksaveasfilename(
                 parent=self.root, title="สำรองการตั้งค่า [ NOXEN ] - Fishing Auto JOODPHAKJAI",
                 defaultextension=".json", filetypes=[("JSON config", "*.json")],
-                initialfile="noxen_fishing_auto_v5_4_backup.json")
+                initialfile="noxen_fishing_auto_v5_5_backup.json")
             if not path:
                 return
             Path(path).write_text(json.dumps(self.cfg, ensure_ascii=False, indent=2), encoding="utf-8")

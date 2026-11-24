@@ -1,10 +1,10 @@
 # [ NOXEN ] - Fishing Auto JOODPHAKJAI
 
-**Windows fishing automation prototype · V5.4 Compact UI · Dark UI**
+**Windows fishing automation prototype · V5.5 Wide-Bar Compatibility · Compact UI · Dark UI**
 
 [ภาษาไทย](README_TH.txt) · [Changelog](CHANGELOG_TH.txt)
 
-NOXEN is a Python desktop application that reads selected Roblox UI regions and automates the fishing loop. The interface uses a Deep Navy / Teal dark theme.
+V5.5 adds wider control-bar detection for rod variants that display a larger Click & Hold control block. NOXEN is a Python desktop application that reads selected Roblox UI regions and automates the fishing loop. The interface uses a Deep Navy / Teal dark theme.
 
 <img width="1529" height="860" alt="Fishing Auto JOODPHAKJAI" src="https://github.com/user-attachments/assets/9b5b01d5-0da1-4c47-84a1-25a04f2d9841" />
 
@@ -82,7 +82,7 @@ python -m unittest discover -s tests -v
 
 ## Version
 
-Current source: **V5.4 Compact UI — NOXEN Dark UI Edition**  
+Current source: **V5.5 Wide-Bar Compatibility — NOXEN Compact Dark UI Edition**  
 See [VERSION.txt](VERSION.txt) and [CHANGELOG_TH.txt](CHANGELOG_TH.txt).
 
 No license file is included at this time. All rights remain with the project author unless a license is added.

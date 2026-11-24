@@ -184,6 +184,15 @@ class VisionTests(unittest.TestCase):
         frame[24:49, 180:480] = (230, 230, 230)
         self.assertIsNone(detect_control_bar(frame))
 
+    def test_control_bar_accepts_wider_rod_variant(self):
+        frame = np.full((70, 640, 3), (25, 25, 24), dtype=np.uint8)
+        # Some rod variants render a wider movable control block (~35% of crop).
+        frame[24:49, 205:430] = (230, 230, 230)
+        bar = detect_control_bar(frame)
+        self.assertIsNotNone(bar)
+        self.assertAlmostEqual(bar[0], 317.5, delta=8)
+        self.assertGreaterEqual(bar[1], 210)
+
     def test_control_bar_rejects_narrow_scene_highlight(self):
         frame = np.full((70, 640, 3), (25, 25, 24), dtype=np.uint8)
         # A narrow 82px highlight matched the previous 12%-of-crop floor.

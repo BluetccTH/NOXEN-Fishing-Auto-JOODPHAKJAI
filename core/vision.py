@@ -128,11 +128,11 @@ def detect_control_bar(frame: np.ndarray) -> tuple[float, float] | None:
     # Raise the floor to reject narrow scene highlights; subtract a small margin
     # for smoothing so smaller synthetic/debug crops remain supported.
     min_width = max(18, int(w * 0.17) - 8)
-    # The in-game control block is substantially narrower than the full rail.
-    # Wide bright scenery/overlays can otherwise be selected as a false bar.
-    # Allow a few edge pixels added by profile smoothing, while still
-    # rejecting scene highlights that span a large portion of the crop.
-    max_width = max(min_width, int(w * 0.30) + 8)
+    # Some rod variants render a wider movable control block than the
+    # standard rod. Accept blocks up to 38% of the crop while still rejecting
+    # very wide scene highlights/overlays that span nearly half the rail.
+    # The small pixel allowance accounts for profile smoothing at block edges.
+    max_width = max(min_width, int(w * 0.38) + 8)
     candidates = []
     for left, right in _runs(mask):
         width = right - left
