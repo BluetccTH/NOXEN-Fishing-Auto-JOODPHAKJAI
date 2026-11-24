@@ -531,14 +531,30 @@ class FishingEngine:
 
                 slider, slider_rect = self._grab_roi(sct, "slider")
                 control_bar = detect_control_bar(slider)
+                fish_track_age = max(0.0, now - previous_time)
                 expected_fish_x = predict_fish_x(
                     previous_fish_x,
                     fish_velocity,
-                    now - previous_time,
+                    fish_track_age,
                     slider.shape[1],
                     max_age_seconds=0.25,
                 )
-                fish_marker = detect_fish_marker(slider, expected_x=expected_fish_x)
+                # Expand the acceptance window with recent fish speed and track
+                # age, but cap it below half the rail. This tolerates fast movement
+                # and reversals while rejecting unrelated distant color matches.
+                expected_distance = None
+                if expected_fish_x is not None:
+                    base_distance = slider.shape[1] * 0.18
+                    motion_distance = abs(fish_velocity) * fish_track_age * 1.8 + 24.0
+                    expected_distance = min(
+                        slider.shape[1] * 0.45,
+                        max(base_distance, motion_distance),
+                    )
+                fish_marker = detect_fish_marker(
+                    slider,
+                    expected_x=expected_fish_x,
+                    max_expected_distance=expected_distance,
+                )
 
                 # The fish/slider need fast feedback. Progress changes much more slowly,
                 # so sample it independently to avoid a second screen capture every frame.
