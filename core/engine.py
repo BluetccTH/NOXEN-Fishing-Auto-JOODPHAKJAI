@@ -14,7 +14,7 @@ from .config import TRACKING_FPS_OPTIONS, tracking_interval
 from .debug import save_debug_snapshot
 from .input_win import MouseController
 from .recovery import classify_failure, recovery_delay
-from .vision import detect_charge, detect_control_bar, detect_fish_marker, detect_progress, fisch_edge_should_hold
+from .vision import (detect_charge, detect_control_bar, detect_fish_marker, detect_progress, fisch_edge_should_hold, predict_fish_x, reel_completion_confirmed)
 from .win32 import (
     Rect,
     client_rect,
@@ -531,9 +531,13 @@ class FishingEngine:
 
                 slider, slider_rect = self._grab_roi(sct, "slider")
                 control_bar = detect_control_bar(slider)
-                expected_fish_x = None
-                if previous_fish_x is not None:
-                    expected_fish_x = previous_fish_x + fish_velocity * max(0.0, now - previous_time)
+                expected_fish_x = predict_fish_x(
+                    previous_fish_x,
+                    fish_velocity,
+                    now - previous_time,
+                    slider.shape[1],
+                    max_age_seconds=0.25,
+                )
                 fish_marker = detect_fish_marker(slider, expected_x=expected_fish_x)
 
                 # The fish/slider need fast feedback. Progress changes much more slowly,
@@ -631,10 +635,10 @@ class FishingEngine:
                     self._event("phase", text=f"จับปลาแล้ว — Progress {((last_progress or 0.0) * 100):.1f}%")
                     return True, f"จับปลาสำเร็จ {((last_progress or 0.0) * 100):.1f}%"
 
+                # A missing fish marker alone is not proof that the minigame ended:
+                # the control bar can still be visible while the marker is occluded.
                 reel_objects_missing = control_bar is None and fish_marker is None
-                fish_and_progress_missing = fish_marker is None and progress is None
-                completion_transition = progress_high_water >= disappear_progress and fish_and_progress_missing
-                if reel_objects_missing or completion_transition:
+                if reel_objects_missing:
                     if both_missing_since is None:
                         both_missing_since = now
                     absent_for = now - both_missing_since
@@ -648,10 +652,22 @@ class FishingEngine:
                         current_held = False
                         self.log.info("reel UI completion transition detected; progress_high_water=%.3f", progress_high_water)
                     if absent_for >= disappear_confirm:
-                        if progress_high_water >= disappear_progress:
+                        if reel_completion_confirmed(
+                            control_bar,
+                            fish_marker,
+                            progress,
+                            progress_high_water=progress_high_water,
+                            disappear_progress=disappear_progress,
+                            absent_for=absent_for,
+                            confirm_seconds=disappear_confirm,
+                        ):
                             self._release()
                             current_held = False
                             self._event("phase", text=f"จับปลาแล้ว ({progress_high_water * 100:.1f}%) — เริ่มรอบใหม่อัตโนมัติ")
+                            self.log.info(
+                                "minigame completion confirmed: UI absent %.2fs, progress_high_water=%.3f",
+                                absent_for, progress_high_water,
+                            )
                             return True, f"มินิเกมจบแล้ว {progress_high_water * 100:.1f}%"
                         if absent_for >= max(bar_lost_limit, fish_lost_limit):
                             return False, "หน้ามินิเกมหายไปก่อน Progress ถึงระดับยืนยัน — พัก ตรวจสถานะ แล้วลองใหม่"
@@ -674,13 +690,21 @@ class FishingEngine:
                     # Do not keep driving the slider blindly if the marker is
                     # temporarily occluded. A short dropout is tolerated, then
                     # the mouse is released while the detector reacquires it.
-                    if current_held and now - last_fish_seen >= max(0.12, tracking_period * 6.0):
+                    fish_missing_for = now - last_fish_seen
+                    if current_held and fish_missing_for >= max(0.12, tracking_period * 6.0):
                         self._release()
                         current_held = False
-                        fish_velocity = 0.0
+                        self.log.warning(
+                            "fish marker missing for %.3fs; released input while keeping short-term track",
+                            fish_missing_for,
+                        )
+                    # Keep the last observation briefly so the detector can search near
+                    # the predicted location after a short occlusion. Never extrapolate
+                    # beyond the bounded prediction horizon.
+                    if fish_missing_for > 0.25:
                         previous_fish_x = None
-                        self.log.warning("fish marker missing; released input while reacquiring")
-                    if now - last_fish_seen > fish_lost_limit:
+                        fish_velocity = 0.0
+                    if fish_missing_for > fish_lost_limit:
                         return False, "ตรวจไม่พบเส้นบอกตำแหน่งปลาต่อเนื่อง — พักแล้วตรวจใหม่"
                     wait_next_frame()
                     continue
