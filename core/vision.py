@@ -141,14 +141,18 @@ def detect_control_bar(frame: np.ndarray) -> tuple[float, float] | None:
 
 
 def detect_fish_marker(
-    frame: np.ndarray, *, expected_x: float | None = None
+    frame: np.ndarray,
+    *,
+    expected_x: float | None = None,
+    max_expected_distance: float | None = None,
 ) -> tuple[float, float] | None:
     """Detect the narrow blue-gray/purple vertical fish indicator.
 
     The marker may look dark slate in one frame and have only dark caps around
     a pale center when it overlaps the bright control bar. We search for its
-    cool-toned vertical core and require a tall, narrow component.
-    Returns (center_x, center_y), in crop coordinates.
+    cool-toned vertical core and require a tall, narrow component. When a prior
+    position is supplied, an optional distance gate rejects remote lookalikes
+    instead of switching tracks. Returns (center_x, center_y), in crop coordinates.
     """
     rgb = _rgb(frame).astype(np.int16)
     h, w, _ = rgb.shape
@@ -198,11 +202,24 @@ def detect_fish_marker(
         candidates.append((occupancy * continuity, left, right, y_top, y_bottom))
     if not candidates:
         return None
-    if expected_x is None:
+    if expected_x is None or not np.isfinite(float(expected_x)):
         chosen = max(candidates, key=lambda item: item[0])
     else:
-        # Prefer the candidate closest to the previous predicted position so
-        # unrelated cool-toned scenery cannot steal the track for one frame.
+        # When a prior track exists, reject candidates outside its plausible
+        # motion envelope. Merely down-ranking distant candidates is unsafe:
+        # if the true marker is briefly occluded, a water reflection can still
+        # win and make the controller believe the fish teleported.
+        if max_expected_distance is not None:
+            distance_limit = max(0.0, float(max_expected_distance))
+            nearby = [
+                item for item in candidates
+                if abs(((item[1] + item[2]) / 2.0) - float(expected_x)) <= distance_limit
+            ]
+            if not nearby:
+                return None
+            candidates = nearby
+
+        # Prefer the strongest candidate near the predicted position.
         scale = max(16.0, w * 0.08)
         chosen = max(
             candidates,
