@@ -85,7 +85,7 @@ class FishingAutoBotV5:
         self.charge_timeout_var = tk.StringVar(value="8")
         self.bite_wait_var = tk.StringVar(value="45")
         self.minigame_timeout_var = tk.StringVar(value="120")
-        self.deadband_var = tk.StringVar(value="10")
+        self.deadband_var = tk.StringVar(value="78")
         self.lookahead_var = tk.StringVar(value="0.10")
         self.poll_var = tk.StringVar(value="35")
         self.tracking_fps_var = tk.StringVar(value="120")
@@ -323,7 +323,7 @@ class FishingAutoBotV5:
 
         control = ttk.LabelFrame(self.advanced_tab, text="การควบคุมเมาส์และภาพ", padding=10)
         control.pack(fill="x", pady=(10, 0))
-        self._entry_row(control, "ระยะเผื่อรอบตำแหน่งปลา (% ของความกว้างแถบ)", self.deadband_var)
+        self._entry_row(control, "จุดสลับทิศเมื่อปลาเข้าใกล้ขอบ (% ของครึ่งแถบ)", self.deadband_var)
         self._entry_row(control, "คาดการณ์การเคลื่อนที่ล่วงหน้า (วินาที)", self.lookahead_var)
         self._entry_row(control, "ช่วงตรวจจับงานทั่วไป (มิลลิวินาที)", self.poll_var)
         tracking_row = ttk.Frame(control)
@@ -384,7 +384,7 @@ class FishingAutoBotV5:
             "กลไกมินิเกมแบบ Fisch\n"
             "• กดเมาส์ซ้ายค้าง: บล็อกควบคุมสีขาวเคลื่อนไปทางขวา\n"
             "• ปล่อยเมาส์: บล็อกควบคุมไหลกลับไปทางซ้าย\n"
-            "• บอทจะอ่านตำแหน่งปลาเทียบกับบล็อก แล้วสลับกด/ปล่อยเพื่อพยายามให้ปลาอยู่ในบล็อก\n"
+            "• บอทใช้ Edge Tracking รักษาปลาให้อยู่ในพื้นที่บล็อก และคาดการณ์ความเร็วทั้งปลาและบล็อกเพื่อลดการแกว่ง\n"
             "• เลือก Tracking ได้ 30/60/90/120 FPS; ที่ 120 FPS ตั้งเป้ารอบละ 8.33 ms และ Progress อ่านแยกประมาณ 20 FPS\n"
             "• ค่า Tracking FPS ที่แสดงเป็นค่าที่วัดได้จริง ไม่ใช่แค่ค่าที่เลือก และอาจต่ำกว่าเป้าหมายตามประสิทธิภาพเครื่อง\n\n"
             "ข้อสำคัญ\n"
@@ -405,7 +405,7 @@ class FishingAutoBotV5:
         self.charge_timeout_var.set(str(s["charge_timeout"]))
         self.bite_wait_var.set(str(s["bite_wait_seconds"]))
         self.minigame_timeout_var.set(str(s["minigame_timeout"]))
-        self.deadband_var.set(str(round(float(s.get("tracking_deadband_ratio", 0.10)) * 100)))
+        self.deadband_var.set(str(round(float(s.get("tracking_edge_guard_ratio", 0.78)) * 100)))
         self.lookahead_var.set(str(s.get("tracking_lookahead_seconds", 0.10)))
         self.poll_var.set(str(round(float(s["poll_interval"]) * 1000)))
         self.tracking_fps_var.set(str(s.get("tracking_fps", 120)))
@@ -424,7 +424,7 @@ class FishingAutoBotV5:
             charge_timeout = float(self.charge_timeout_var.get())
             bite_wait = float(self.bite_wait_var.get())
             minigame_timeout = float(self.minigame_timeout_var.get())
-            deadband_percent = float(self.deadband_var.get())
+            edge_guard_percent = float(self.deadband_var.get())
             lookahead = float(self.lookahead_var.get())
             poll_ms = int(self.poll_var.get())
             tracking_fps = int(self.tracking_fps_var.get())
@@ -440,8 +440,8 @@ class FishingAutoBotV5:
             raise ValueError("เวลาสำรองต้องอยู่ระหว่าง 0.2–10 วินาที")
         if not 1 <= charge_timeout <= 30 or not 5 <= bite_wait <= 180 or not 10 <= minigame_timeout <= 240:
             raise ValueError("ตรวจสอบช่วงเวลาที่ตั้งค่า: Charge 1–30s, รอปลา 5–180s, มินิเกม 10–240s")
-        if not 3 <= deadband_percent <= 25 or not 0 <= lookahead <= 0.35 or not 15 <= poll_ms <= 100:
-            raise ValueError("ตรวจสอบระยะเผื่อ 3–25%/คาดการณ์ 0–0.35s/ช่วงตรวจจับงานทั่วไปอีกครั้ง")
+        if not 55 <= edge_guard_percent <= 92 or not 0 <= lookahead <= 0.35 or not 15 <= poll_ms <= 100:
+            raise ValueError("ตรวจสอบจุดสลับทิศ 55–92%/คาดการณ์ 0–0.35s/ช่วงตรวจจับ 15–100ms")
         if tracking_fps not in TRACKING_FPS_OPTIONS:
             raise ValueError("Tracking FPS เลือกได้เฉพาะ 30, 60, 90 หรือ 120")
         if not 0.5 <= recovery_initial <= 10 or not 2 <= recovery_max <= 60 or recovery_max < recovery_initial:
@@ -456,7 +456,7 @@ class FishingAutoBotV5:
             "minigame_timeout": minigame_timeout,
             "max_run_minutes": 0,
             "repeat_fishing": True,
-            "tracking_deadband_ratio": deadband_percent / 100.0,
+            "tracking_edge_guard_ratio": edge_guard_percent / 100.0,
             "tracking_lookahead_seconds": lookahead,
             "tracking_fps": tracking_fps,
             "tracking_auto_scale": bool(self.tracking_auto_scale_var.get()),
