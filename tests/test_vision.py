@@ -2,7 +2,7 @@ import unittest
 import numpy as np
 
 from core.config import TRACKING_FPS_OPTIONS, tracking_interval
-from core.vision import detect_charge, detect_control_bar, detect_fish_marker, detect_handle_center, detect_progress, detect_target_center, fisch_should_hold
+from core.vision import detect_charge, detect_control_bar, detect_fish_marker, detect_handle_center, detect_progress, detect_target_center, fisch_edge_should_hold, fisch_should_hold
 
 
 class VisionTests(unittest.TestCase):
@@ -55,6 +55,49 @@ class VisionTests(unittest.TestCase):
         value = detect_progress(white)
         self.assertIsNotNone(value)
         self.assertAlmostEqual(value, 0.70, delta=0.04)
+
+    def test_marker_still_detected_when_broad_lavender_reflection_overlaps(self):
+        frame = np.full((130, 640, 3), (145, 105, 75), dtype=np.uint8)
+        # A large low-saturation lavender reflection used to merge with the
+        # marker mask and make the entire component too wide to accept.
+        frame[20:112, 220:370] = (150, 140, 155)
+        frame[45:86, 275:430] = (230, 230, 230)  # pale moving control block
+        # The blue-gray marker remains visible at its caps; its center is
+        # pale/neutral where it overlaps the control block.
+        frame[22:48, 355:365] = (65, 73, 85)
+        frame[48:86, 355:365] = (225, 225, 230)
+        frame[86:110, 355:365] = (65, 73, 85)
+        marker = detect_fish_marker(frame, expected_x=362)
+        self.assertIsNotNone(marker)
+        self.assertAlmostEqual(marker[0], 360, delta=4)
+
+    def test_fish_marker_prefers_temporally_nearest_candidate(self):
+        frame = np.full((70, 500, 3), (25, 25, 24), dtype=np.uint8)
+        frame[7:63, 80:90] = (82, 88, 112)
+        frame[7:63, 405:415] = (82, 88, 112)
+        marker = detect_fish_marker(frame, expected_x=410)
+        self.assertIsNotNone(marker)
+        self.assertAlmostEqual(marker[0], 410, delta=4)
+
+    def test_edge_tracker_switches_only_near_safe_zone_edges(self):
+        # Stay with the current input while the fish is comfortably inside.
+        self.assertFalse(fisch_edge_should_hold(540, 500, 150, False))
+        self.assertTrue(fisch_edge_should_hold(470, 500, 150, True))
+        # Turn toward the fish when its predicted position approaches an edge.
+        self.assertTrue(fisch_edge_should_hold(570, 500, 150, False))
+        self.assertFalse(fisch_edge_should_hold(430, 500, 150, True))
+
+    def test_edge_tracker_predicts_relative_fish_and_bar_motion(self):
+        # The fish is not at the edge yet, but is moving toward the right edge.
+        self.assertTrue(fisch_edge_should_hold(
+            530, 500, 150, False, fish_velocity=220, bar_velocity=0,
+            prediction_seconds=0.20,
+        ))
+        # A bar already moving toward the fish avoids an unnecessary late input.
+        self.assertFalse(fisch_edge_should_hold(
+            555, 500, 150, False, fish_velocity=0, bar_velocity=260,
+            prediction_seconds=0.20,
+        ))
 
     def test_fisch_style_hold_release_direction(self):
         # In this minigame, holding moves the pale bar right; releasing lets it drift left.
