@@ -79,6 +79,27 @@ class VisionTests(unittest.TestCase):
         self.assertIsNotNone(marker)
         self.assertAlmostEqual(marker[0], 410, delta=4)
 
+    def test_fish_marker_distance_gate_rejects_remote_lookalikes(self):
+        frame = np.full((70, 500, 3), (25, 25, 24), dtype=np.uint8)
+        frame[7:63, 80:90] = (82, 88, 112)
+        frame[7:63, 405:415] = (82, 88, 112)
+
+        # The expected marker remains within the gate, even with a stronger
+        # unrelated candidate elsewhere in the crop.
+        frame[7:63, 80:90] = (90, 96, 120)
+        marker = detect_fish_marker(
+            frame, expected_x=410, max_expected_distance=40
+        )
+        self.assertIsNotNone(marker)
+        self.assertAlmostEqual(marker[0], 410, delta=4)
+
+        # When only a remote lookalike is plausible, report a short dropout
+        # instead of silently switching the fish track to another object.
+        marker = detect_fish_marker(
+            frame, expected_x=250, max_expected_distance=40
+        )
+        self.assertIsNone(marker)
+
     def test_fish_prediction_is_bounded_and_clamped(self):
         self.assertAlmostEqual(predict_fish_x(100, 200, 0.10, 500), 120.0)
         self.assertEqual(predict_fish_x(-20, 0, 0.10, 500), 0.0)
