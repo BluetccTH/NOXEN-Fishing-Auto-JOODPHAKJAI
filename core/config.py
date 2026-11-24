@@ -45,6 +45,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "tracking_lookahead_seconds": 0.10,
         "tracking_deadband_ratio": 0.10,
         "tracking_fps": 120,
+        "tracking_auto_scale": True,
         "progress_poll_interval": 0.05,
         "minigame_disappear_success_progress": 0.78,
         "minigame_disappear_confirm_seconds": 0.55,
