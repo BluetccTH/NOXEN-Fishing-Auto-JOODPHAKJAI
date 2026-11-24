@@ -162,7 +162,7 @@ def detect_fish_marker(
     # actual marker. Keep the mask focused on blue-gray pixels only.
     marker_mask = (
         (b > r * 1.08) & (b > g * 1.035) &
-        (r > 30) & (g > 30) & (b < 205) & (g < 190)
+        (r > 30) & (g > 30) & (b < 230) & (g < 190)
     )
 
     # Avoid text above and the progress strip below. The marker sits around
