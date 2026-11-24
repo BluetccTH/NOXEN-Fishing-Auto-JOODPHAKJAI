@@ -140,7 +140,9 @@ def detect_control_bar(frame: np.ndarray) -> tuple[float, float] | None:
     return ((left + right) / 2.0, float(width))
 
 
-def detect_fish_marker(frame: np.ndarray) -> tuple[float, float] | None:
+def detect_fish_marker(
+    frame: np.ndarray, *, expected_x: float | None = None
+) -> tuple[float, float] | None:
     """Detect the narrow blue-gray/purple vertical fish indicator.
 
     The marker may look dark slate in one frame and have only dark caps around
@@ -154,24 +156,24 @@ def detect_fish_marker(frame: np.ndarray) -> tuple[float, float] | None:
         return None
     r, g, b = rgb[:, :, 0], rgb[:, :, 1], rgb[:, :, 2]
 
-    # Muted blue-gray/purple core from the supplied screenshots. This is
-    # deliberately tolerant of low saturation and Roblox post-processing.
-    cool_core = (
+    # The real marker is a narrow cool blue-gray/slate pill. A broad lavender
+    # threshold also matches water reflections and the pale moving block; on
+    # some frames those pixels merge into a very wide component and hide the
+    # actual marker. Keep the mask focused on blue-gray pixels only.
+    marker_mask = (
         (b > r * 1.08) & (b > g * 1.035) &
         (r > 30) & (g > 30) & (b < 205) & (g < 190)
     )
-    lavender_core = (
-        (r > 55) & (b > 55) & (r > g * 1.02) & (b > g * 1.02) &
-        (np.abs(r - b) < 145) & (g < 180)
-    )
-    marker_mask = cool_core | lavender_core
 
     # Avoid text above and the progress strip below. The marker sits around
     # the horizontal rail and can extend slightly beyond its top/bottom edge.
     y0, y1 = max(0, int(h * 0.14)), min(h, int(h * 0.86))
     band = marker_mask[y0:y1, :]
     scores = band.sum(axis=0).astype(np.float32)
-    threshold = max(2.0, h * 0.012)
+    # Ignore one- or two-pixel color noise from water reflections. The real
+    # capsule contributes a compact column of blue-gray pixels, including its
+    # visible caps when its center is covered by the pale control block.
+    threshold = max(3.0, h * 0.035)
     active_cols = scores >= threshold
     max_width = max(14, int(w * 0.045))
     candidates = []
@@ -196,8 +198,52 @@ def detect_fish_marker(frame: np.ndarray) -> tuple[float, float] | None:
         candidates.append((occupancy * continuity, left, right, y_top, y_bottom))
     if not candidates:
         return None
-    _score, left, right, y_top, y_bottom = max(candidates, key=lambda item: item[0])
+    if expected_x is None:
+        chosen = max(candidates, key=lambda item: item[0])
+    else:
+        # Prefer the candidate closest to the previous predicted position so
+        # unrelated cool-toned scenery cannot steal the track for one frame.
+        scale = max(16.0, w * 0.08)
+        chosen = max(
+            candidates,
+            key=lambda item: item[0] / (1.0 + abs(((item[1] + item[2]) / 2.0) - float(expected_x)) / scale),
+        )
+    _score, left, right, y_top, y_bottom = chosen
     return ((left + right) / 2.0, (y_top + y_bottom) / 2.0)
+
+
+def fisch_edge_should_hold(
+    fish_x: float,
+    bar_center_x: float,
+    bar_width: float,
+    currently_held: bool,
+    *,
+    fish_velocity: float = 0.0,
+    bar_velocity: float = 0.0,
+    prediction_seconds: float = 0.10,
+    edge_guard_ratio: float = 0.78,
+) -> bool:
+    """Keep the fish inside the moving bar instead of chasing its exact center.
+
+    Holding moves the pale bar right; releasing lets it drift left. The input
+    changes only when the predicted fish position approaches a guarded edge.
+    Both fish and bar velocity are included to anticipate overshoot.
+    """
+    width = max(1.0, float(bar_width))
+    horizon = float(np.clip(prediction_seconds, 0.0, 0.25))
+    relative_position = float(fish_x) - float(bar_center_x)
+    relative_velocity = float(np.clip(fish_velocity, -1600.0, 1600.0)) - float(
+        np.clip(bar_velocity, -1800.0, 1800.0)
+    )
+    predicted_error = relative_position + relative_velocity * horizon
+    guard = float(np.clip(edge_guard_ratio, 0.55, 0.92))
+    safe_radius = max(6.0, (width * 0.5) * guard)
+
+    if predicted_error >= safe_radius:
+        return True
+    if predicted_error <= -safe_radius:
+        return False
+    return bool(currently_held)
 
 
 def fisch_should_hold(
