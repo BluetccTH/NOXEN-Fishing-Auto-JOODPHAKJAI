@@ -1,10 +1,18 @@
 import unittest
 import numpy as np
 
+from core.config import TRACKING_FPS_OPTIONS, tracking_interval
 from core.vision import detect_charge, detect_control_bar, detect_fish_marker, detect_handle_center, detect_progress, detect_target_center, fisch_should_hold
 
 
 class VisionTests(unittest.TestCase):
+    def test_tracking_fps_presets_have_expected_intervals(self):
+        self.assertEqual(TRACKING_FPS_OPTIONS, (30, 60, 90, 120))
+        self.assertAlmostEqual(tracking_interval(120), 1 / 120)
+        self.assertAlmostEqual(tracking_interval("60"), 1 / 60)
+        with self.assertRaises(ValueError):
+            tracking_interval(144)
+
     def test_charge_reads_white_fill_below_green_cap(self):
         # Match the supplied UI: narrow green/yellow-green top and white fill below.
         frame = np.full((308, 118, 3), (28, 32, 25), dtype=np.uint8)
