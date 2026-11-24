@@ -89,6 +89,7 @@ class FishingAutoBotV5:
         self.lookahead_var = tk.StringVar(value="0.10")
         self.poll_var = tk.StringVar(value="35")
         self.tracking_fps_var = tk.StringVar(value="120")
+        self.tracking_auto_scale_var = tk.BooleanVar(value=True)
         self.recovery_enabled_var = tk.BooleanVar(value=True)
         self.wait_for_focus_var = tk.BooleanVar(value=True)
         self.recovery_initial_var = tk.StringVar(value="2.5")
@@ -337,6 +338,11 @@ class FishingAutoBotV5:
         ).pack(side="left")
         ttk.Label(control, text="120 FPS = รอบอ่านทุก 8.33 ms • Progress แยกอ่านประมาณ 20 FPS",
                   style="Muted.TLabel").pack(anchor="w", pady=(2, 0))
+        ttk.Checkbutton(
+            control,
+            text="ปรับ FPS อัตโนมัติเมื่อเครื่องประมวลผลไม่ทัน และเพิ่มกลับเมื่อพร้อม",
+            variable=self.tracking_auto_scale_var,
+        ).pack(anchor="w", pady=(3, 0))
 
         recovery = ttk.LabelFrame(self.advanced_tab, text="ระบบกู้คืนอัตโนมัติ (Recovery)", padding=10)
         recovery.pack(fill="x", pady=(10, 0))
@@ -403,6 +409,7 @@ class FishingAutoBotV5:
         self.lookahead_var.set(str(s.get("tracking_lookahead_seconds", 0.10)))
         self.poll_var.set(str(round(float(s["poll_interval"]) * 1000)))
         self.tracking_fps_var.set(str(s.get("tracking_fps", 120)))
+        self.tracking_auto_scale_var.set(bool(s.get("tracking_auto_scale", True)))
         self.recovery_enabled_var.set(bool(s.get("recovery_enabled", True)))
         self.wait_for_focus_var.set(bool(s.get("wait_for_focus_recovery", True)))
         self.recovery_initial_var.set(str(s.get("recovery_initial_seconds", 2.5)))
@@ -452,6 +459,7 @@ class FishingAutoBotV5:
             "tracking_deadband_ratio": deadband_percent / 100.0,
             "tracking_lookahead_seconds": lookahead,
             "tracking_fps": tracking_fps,
+            "tracking_auto_scale": bool(self.tracking_auto_scale_var.get()),
             "progress_poll_interval": 0.05,
             "poll_interval": poll_ms / 1000.0,
             "recovery_enabled": bool(self.recovery_enabled_var.get()),
@@ -745,7 +753,8 @@ class FishingAutoBotV5:
                     if "tracking_fps" in payload:
                         value = float(payload["tracking_fps"])
                         target = int(payload.get("tracking_target_fps", 120))
-                        self.tracking_fps_status_var.set(f"Tracking: {value:.1f}/{target} FPS")
+                        effective = int(payload.get("tracking_effective_fps", target))
+                        self.tracking_fps_status_var.set(f"Tracking: {value:.1f} FPS (auto {effective}, cap {target})")
                     if "tracking_ms" in payload:
                         latency_ms = float(payload["tracking_ms"])
                         self.tracking_latency_status_var.set(f"Frame: {latency_ms:.2f} ms")
