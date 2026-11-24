@@ -125,7 +125,9 @@ def detect_control_bar(frame: np.ndarray) -> tuple[float, float] | None:
         smooth = np.convolve(mask.astype(np.float32), np.ones(5, dtype=np.float32) / 5.0, mode="same")
         mask = smooth >= 0.58
     min_width = max(18, int(w * 0.12))
-    max_width = int(w * 0.66)
+    # The in-game control block is substantially narrower than the full rail.
+    # Wide bright scenery/overlays can otherwise be selected as a false bar.
+    max_width = max(min_width, int(w * 0.30))
     candidates = []
     for left, right in _runs(mask):
         width = right - left
