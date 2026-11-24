@@ -212,6 +212,46 @@ def detect_fish_marker(
     return ((left + right) / 2.0, (y_top + y_bottom) / 2.0)
 
 
+def predict_fish_x(
+    previous_x: float | None,
+    velocity: float,
+    age_seconds: float,
+    frame_width: int,
+    *,
+    max_age_seconds: float = 0.25,
+) -> float | None:
+    """Predict a marker position only while its last observation is fresh."""
+    if previous_x is None or frame_width <= 0:
+        return None
+    age = float(age_seconds)
+    if not np.isfinite(age) or age < 0.0 or age > max(0.0, float(max_age_seconds)):
+        return None
+    predicted = float(previous_x) + float(velocity) * age
+    if not np.isfinite(predicted):
+        return None
+    return float(np.clip(predicted, 0.0, float(frame_width - 1)))
+
+
+def reel_completion_confirmed(
+    control_bar: tuple[float, float] | None,
+    fish_marker: tuple[float, float] | None,
+    progress_value: float | None,
+    *,
+    progress_high_water: float,
+    disappear_progress: float,
+    absent_for: float,
+    confirm_seconds: float,
+) -> bool:
+    """Accept disappearance as success only when every reel UI element is absent."""
+    return (
+        control_bar is None
+        and fish_marker is None
+        and progress_value is None
+        and float(progress_high_water) >= float(disappear_progress)
+        and float(absent_for) >= max(0.0, float(confirm_seconds))
+    )
+
+
 def fisch_edge_should_hold(
     fish_x: float,
     bar_center_x: float,
