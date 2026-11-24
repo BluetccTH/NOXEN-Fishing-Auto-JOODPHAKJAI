@@ -10,6 +10,7 @@ from typing import Callable
 import mss
 import numpy as np
 
+from .config import tracking_interval
 from .debug import save_debug_snapshot
 from .input_win import MouseController
 from .recovery import classify_failure, recovery_delay
@@ -437,10 +438,21 @@ class FishingEngine:
         return False, "ไม่พบแถบควบคุม/ตัวบอกตำแหน่งปลา — ตรวจพื้นที่ C และจะลองใหม่อัตโนมัติ"
 
     def _play_minigame(self, sct: mss.mss) -> tuple[bool, str]:
-        """Play the reel minigame using Fisch's hold-right / release-left model."""
+        """Track the fish at a selectable rate; Progress is sampled less often."""
+        target_fps = int(self.settings.get("tracking_fps", 120))
+        try:
+            tracking_period = tracking_interval(target_fps)
+        except ValueError:
+            target_fps = 120
+            tracking_period = tracking_interval(target_fps)
+            self.log.warning("invalid tracking_fps setting; falling back to 120")
+
+        progress_interval = max(
+            0.025,
+            min(0.25, float(self.settings.get("progress_poll_interval", 0.05))),
+        )
         finish = float(self.settings.get("minigame_finish", 0.985))
         timeout = float(self.settings.get("minigame_timeout", 120.0))
-        poll = max(0.02, float(self.settings.get("poll_interval", 0.035)))
         lookahead = max(0.0, float(self.settings.get("tracking_lookahead_seconds", 0.10)))
         deadband_ratio = float(self.settings.get("tracking_deadband_ratio", 0.10))
         bar_lost_limit = float(self.settings.get("bar_lost_seconds", 1.5))
@@ -459,7 +471,14 @@ class FishingEngine:
         self._check_active(force=True)
         self._release()
         self.mouse.move(round(cursor_x), round(cursor_y))
-        self._event("phase", text="มินิเกมแบบ Fisch — กดค้างให้แถบขาวไปขวา / ปล่อยให้กลับซ้าย")
+        self._event(
+            "phase",
+            text=f"มินิเกม — High FPS Tracking {target_fps} FPS (Progress แยกอ่าน {1.0 / progress_interval:.0f} Hz)",
+        )
+        self.log.info(
+            "reel tracking started: target_fps=%s progress_hz=%.1f frame_budget=%.2fms",
+            target_fps, 1.0 / progress_interval, tracking_period * 1000.0,
+        )
 
         started = time.monotonic()
         last_bar_seen = started
@@ -468,34 +487,61 @@ class FishingEngine:
         previous_time = started
         fish_velocity = 0.0
         last_ui = 0.0
-        complete_frames = 0
+        last_metrics_emit = 0.0
+        last_telemetry_log = started
+        last_progress_read = 0.0
         last_progress: float | None = None
+        complete_frames = 0
         progress_high_water = 0.0
         both_missing_since: float | None = None
         current_held = False
         last_inside: bool | None = None
+        frame_intervals: deque[float] = deque(maxlen=60)
+        last_frame_started: float | None = None
+        next_frame_deadline = time.perf_counter()
+
+        def wait_next_frame() -> None:
+            nonlocal next_frame_deadline
+            next_frame_deadline += tracking_period
+            remaining = next_frame_deadline - time.perf_counter()
+            if remaining > 0:
+                time.sleep(remaining)
+            else:
+                # Drop missed deadlines instead of running catch-up bursts.
+                next_frame_deadline = time.perf_counter()
+
         try:
             while not self.stop_event.is_set():
+                frame_started = time.perf_counter()
+                if last_frame_started is not None:
+                    frame_intervals.append(max(0.0001, frame_started - last_frame_started))
+                last_frame_started = frame_started
+
                 self._check_active()
                 now = time.monotonic()
                 if now - started >= timeout:
                     return False, "มินิเกมเกินเวลาสูงสุด — พักแล้วตรวจใหม่"
 
                 slider, slider_rect = self._grab_roi(sct, "slider")
-                progress_frame, _ = self._grab_roi(sct, "progress")
                 control_bar = detect_control_bar(slider)
                 fish_marker = detect_fish_marker(slider)
-                progress = detect_progress(progress_frame)
 
-                if progress is not None:
-                    last_progress = progress
-                    progress_high_water = max(progress_high_water, progress)
-                    if progress >= finish:
-                        complete_frames += 1
+                # The fish/slider need fast feedback. Progress changes much more slowly,
+                # so sample it independently to avoid a second screen capture every frame.
+                progress_updated = now - last_progress_read >= progress_interval
+                if progress_updated:
+                    progress_frame, _ = self._grab_roi(sct, "progress")
+                    last_progress = detect_progress(progress_frame)
+                    last_progress_read = now
+                    if last_progress is not None:
+                        progress_high_water = max(progress_high_water, last_progress)
+                        if last_progress >= finish:
+                            complete_frames += 1
+                        else:
+                            complete_frames = 0
                     else:
                         complete_frames = 0
-                else:
-                    complete_frames = 0
+                progress = last_progress
 
                 bar_center = control_bar[0] if control_bar else None
                 bar_width = control_bar[1] if control_bar else None
@@ -505,14 +551,35 @@ class FishingEngine:
                     half = control_bar[1] / 2.0
                     fish_inside = (control_bar[0] - half <= fish_marker[0] <= control_bar[0] + half)
 
-                self._event(
-                    "metrics",
-                    bar_center=bar_center,
-                    bar_width=bar_width,
-                    fish_x=fish_x,
-                    fish_inside=fish_inside,
-                    progress=progress,
-                )
+                processing_ms = (time.perf_counter() - frame_started) * 1000.0
+                if now - last_metrics_emit >= 0.10:
+                    measured_fps = (
+                        len(frame_intervals) / sum(frame_intervals)
+                        if frame_intervals and sum(frame_intervals) > 0 else 0.0
+                    )
+                    self._event(
+                        "metrics",
+                        bar_center=bar_center,
+                        bar_width=bar_width,
+                        fish_x=fish_x,
+                        fish_inside=fish_inside,
+                        progress=progress,
+                        tracking_fps=measured_fps,
+                        tracking_target_fps=target_fps,
+                        tracking_ms=processing_ms,
+                    )
+                    last_metrics_emit = now
+
+                if now - last_telemetry_log >= 1.0:
+                    measured_fps = (
+                        len(frame_intervals) / sum(frame_intervals)
+                        if frame_intervals and sum(frame_intervals) > 0 else 0.0
+                    )
+                    self.log.info(
+                        "tracking telemetry: actual=%.1f/target=%s FPS, processing=%.2fms, progress=%s",
+                        measured_fps, target_fps, processing_ms, progress,
+                    )
+                    last_telemetry_log = now
 
                 if complete_frames >= 2:
                     self.log.info("minigame complete by progress %.3f", last_progress or 0.0)
@@ -530,9 +597,9 @@ class FishingEngine:
                     if progress is not None:
                         if absent_for >= max(bar_lost_limit, fish_lost_limit):
                             return False, "ไม่พบรางและตัวบอกปลา แต่ Progress ยังแสดงอยู่ — พักแล้วตรวจใหม่"
-                        time.sleep(poll)
+                        wait_next_frame()
                         continue
-                    if progress_high_water >= disappear_progress and absent_for <= poll * 2.0:
+                    if progress_high_water >= disappear_progress and absent_for <= tracking_period * 2.0:
                         self._release()
                         current_held = False
                         self.log.info("reel UI completion transition detected; progress_high_water=%.3f", progress_high_water)
@@ -547,7 +614,7 @@ class FishingEngine:
                     if now - last_ui >= 1.0:
                         self.log.info("reel UI absent; progress_high_water=%.3f absent_for=%.2fs", progress_high_water, absent_for)
                         last_ui = now
-                    time.sleep(poll)
+                    wait_next_frame()
                     continue
                 else:
                     both_missing_since = None
@@ -555,14 +622,14 @@ class FishingEngine:
                 if control_bar is None:
                     if now - last_bar_seen > bar_lost_limit:
                         return False, "ตรวจไม่พบแถบควบคุมสีขาวต่อเนื่อง — พักแล้วตรวจใหม่"
-                    time.sleep(poll)
+                    wait_next_frame()
                     continue
                 last_bar_seen = now
 
                 if fish_marker is None:
                     if now - last_fish_seen > fish_lost_limit:
                         return False, "ตรวจไม่พบเส้นบอกตำแหน่งปลาต่อเนื่อง — พักแล้วตรวจใหม่"
-                    time.sleep(poll)
+                    wait_next_frame()
                     continue
                 last_fish_seen = now
 
@@ -600,18 +667,24 @@ class FishingEngine:
                     last_inside = fish_inside
 
                 if now - last_ui >= 0.8:
+                    measured_fps = (
+                        len(frame_intervals) / sum(frame_intervals)
+                        if frame_intervals and sum(frame_intervals) > 0 else 0.0
+                    )
                     self.log.info(
-                        "Fisch reel bar=%.1f width=%.1f fish=%.1f predicted=%.1f input=%s inside=%s progress=%s high_water=%.3f",
+                        "Fisch reel bar=%.1f width=%.1f fish=%.1f predicted=%.1f input=%s inside=%s progress=%s tracking=%.1f/%sFPS",
                         control_bar[0], control_bar[1], fish_x_now, fish_x_now + prediction_px,
-                        "HOLD" if current_held else "RELEASE", fish_inside, progress, progress_high_water,
+                        "HOLD" if current_held else "RELEASE", fish_inside, progress,
+                        measured_fps, target_fps,
                     )
                     self._event(
                         "phase",
-                        text=("กำลังตามปลาแบบ Fisch — " + ("กดค้าง/เลื่อนไปขวา" if current_held else "ปล่อย/เลื่อนไปซ้าย")
-                              + (" — ปลาอยู่ในแถบ" if fish_inside else " — กำลังปรับตำแหน่ง")),
+                        text=("กำลังตามปลา — " + ("กดค้าง/เลื่อนไปขวา" if current_held else "ปล่อย/เลื่อนไปซ้าย")
+                              + (" — ปลาอยู่ในแถบ" if fish_inside else " — กำลังปรับตำแหน่ง")
+                              + f" — Tracking {measured_fps:.0f}/{target_fps} FPS"),
                     )
                     last_ui = now
-                time.sleep(poll)
+                wait_next_frame()
         finally:
             self._release()
         return False, "ผู้ใช้สั่งหยุดระหว่างมินิเกม"
