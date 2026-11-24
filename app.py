@@ -15,7 +15,7 @@ from tkinter import ttk, messagebox, filedialog
 import mss
 from PIL import Image, ImageTk
 
-from core.config import ConfigStore, DEFAULT_CONFIG, _merge
+from core.config import ConfigStore, DEFAULT_CONFIG, TRACKING_FPS_OPTIONS, _merge
 from core.debug import save_debug_snapshot, test_vision
 from core.engine import FishingEngine
 from core.input_win import MouseController
@@ -69,6 +69,8 @@ class FishingAutoBotV5:
         self.target_var = tk.StringVar(value="แถบควบคุม: --")
         self.handle_var = tk.StringVar(value="ตำแหน่งปลา: --")
         self.progress_var = tk.StringVar(value="Progress: --")
+        self.tracking_fps_status_var = tk.StringVar(value="Tracking: -- FPS")
+        self.tracking_latency_status_var = tk.StringVar(value="Frame: -- ms")
         self.round_var = tk.StringVar(value="สำเร็จ 0 รอบ")
         self.calibration_vars = {
             "cast_point": tk.StringVar(),
@@ -86,6 +88,7 @@ class FishingAutoBotV5:
         self.deadband_var = tk.StringVar(value="10")
         self.lookahead_var = tk.StringVar(value="0.10")
         self.poll_var = tk.StringVar(value="35")
+        self.tracking_fps_var = tk.StringVar(value="120")
         self.recovery_enabled_var = tk.BooleanVar(value=True)
         self.wait_for_focus_var = tk.BooleanVar(value=True)
         self.recovery_initial_var = tk.StringVar(value="2.5")
@@ -239,7 +242,8 @@ class FishingAutoBotV5:
     def _build_control_tab(self) -> None:
         top = ttk.LabelFrame(self.control_tab, text="สถานะการทำงาน", padding=12)
         top.pack(fill="x")
-        for var in (self.charge_var, self.target_var, self.handle_var, self.progress_var):
+        for var in (self.charge_var, self.target_var, self.handle_var, self.progress_var,
+                    self.tracking_fps_status_var, self.tracking_latency_status_var):
             ttk.Label(top, textvariable=var, font=("Segoe UI", 11)).pack(anchor="w", pady=2)
         ttk.Label(top, textvariable=self.round_var, style="Success.TLabel").pack(anchor="w", pady=(5, 0))
 
@@ -320,7 +324,19 @@ class FishingAutoBotV5:
         control.pack(fill="x", pady=(10, 0))
         self._entry_row(control, "ระยะเผื่อรอบตำแหน่งปลา (% ของความกว้างแถบ)", self.deadband_var)
         self._entry_row(control, "คาดการณ์การเคลื่อนที่ล่วงหน้า (วินาที)", self.lookahead_var)
-        self._entry_row(control, "ช่วงตรวจจับภาพ (มิลลิวินาที)", self.poll_var)
+        self._entry_row(control, "ช่วงตรวจจับงานทั่วไป (มิลลิวินาที)", self.poll_var)
+        tracking_row = ttk.Frame(control)
+        tracking_row.pack(fill="x", pady=4)
+        ttk.Label(tracking_row, text="Tracking FPS (เฉพาะมินิเกม)", width=43).pack(side="left")
+        ttk.Combobox(
+            tracking_row,
+            textvariable=self.tracking_fps_var,
+            values=tuple(str(rate) for rate in TRACKING_FPS_OPTIONS),
+            width=9,
+            state="readonly",
+        ).pack(side="left")
+        ttk.Label(control, text="120 FPS = รอบอ่านทุก 8.33 ms • Progress แยกอ่านประมาณ 20 FPS",
+                  style="Muted.TLabel").pack(anchor="w", pady=(2, 0))
 
         recovery = ttk.LabelFrame(self.advanced_tab, text="ระบบกู้คืนอัตโนมัติ (Recovery)", padding=10)
         recovery.pack(fill="x", pady=(10, 0))
@@ -362,7 +378,9 @@ class FishingAutoBotV5:
             "กลไกมินิเกมแบบ Fisch\n"
             "• กดเมาส์ซ้ายค้าง: บล็อกควบคุมสีขาวเคลื่อนไปทางขวา\n"
             "• ปล่อยเมาส์: บล็อกควบคุมไหลกลับไปทางซ้าย\n"
-            "• บอทจะอ่านตำแหน่งปลาเทียบกับบล็อก แล้วสลับกด/ปล่อยเพื่อพยายามให้ปลาอยู่ในบล็อก\n\n"
+            "• บอทจะอ่านตำแหน่งปลาเทียบกับบล็อก แล้วสลับกด/ปล่อยเพื่อพยายามให้ปลาอยู่ในบล็อก\n"
+            "• เลือก Tracking ได้ 30/60/90/120 FPS; ที่ 120 FPS ตั้งเป้ารอบละ 8.33 ms และ Progress อ่านแยกประมาณ 20 FPS\n"
+            "• ค่า Tracking FPS ที่แสดงเป็นค่าที่วัดได้จริง ไม่ใช่แค่ค่าที่เลือก และอาจต่ำกว่าเป้าหมายตามประสิทธิภาพเครื่อง\n\n"
             "ข้อสำคัญ\n"
             "• ใช้สีตามภาพจริง: Charge เขียว/เหลือง + ขาว; บล็อกควบคุมเทาอ่อน/ขาว; ตัวบอกปลาม่วง/เทาอมฟ้า; Progress ส้มอมชมพูหรือขาว\n"
             "• หากอ่าน Charge/Progress/ตำแหน่งปลาไม่พบ บอทจะปล่อยเมาส์ พักตามเวลาที่ตั้ง และลองตรวจใหม่โดยอัตโนมัติ ไม่ต้องกด F6 ซ้ำ\n"
@@ -384,6 +402,7 @@ class FishingAutoBotV5:
         self.deadband_var.set(str(round(float(s.get("tracking_deadband_ratio", 0.10)) * 100)))
         self.lookahead_var.set(str(s.get("tracking_lookahead_seconds", 0.10)))
         self.poll_var.set(str(round(float(s["poll_interval"]) * 1000)))
+        self.tracking_fps_var.set(str(s.get("tracking_fps", 120)))
         self.recovery_enabled_var.set(bool(s.get("recovery_enabled", True)))
         self.wait_for_focus_var.set(bool(s.get("wait_for_focus_recovery", True)))
         self.recovery_initial_var.set(str(s.get("recovery_initial_seconds", 2.5)))
@@ -401,6 +420,7 @@ class FishingAutoBotV5:
             deadband_percent = float(self.deadband_var.get())
             lookahead = float(self.lookahead_var.get())
             poll_ms = int(self.poll_var.get())
+            tracking_fps = int(self.tracking_fps_var.get())
             recovery_initial = float(self.recovery_initial_var.get())
             recovery_max = float(self.recovery_max_var.get())
         except ValueError as exc:
@@ -414,7 +434,9 @@ class FishingAutoBotV5:
         if not 1 <= charge_timeout <= 30 or not 5 <= bite_wait <= 180 or not 10 <= minigame_timeout <= 240:
             raise ValueError("ตรวจสอบช่วงเวลาที่ตั้งค่า: Charge 1–30s, รอปลา 5–180s, มินิเกม 10–240s")
         if not 3 <= deadband_percent <= 25 or not 0 <= lookahead <= 0.35 or not 15 <= poll_ms <= 100:
-            raise ValueError("ตรวจสอบระยะเผื่อ 3–25%/คาดการณ์ 0–0.35s/ช่วงตรวจจับภาพอีกครั้ง")
+            raise ValueError("ตรวจสอบระยะเผื่อ 3–25%/คาดการณ์ 0–0.35s/ช่วงตรวจจับงานทั่วไปอีกครั้ง")
+        if tracking_fps not in TRACKING_FPS_OPTIONS:
+            raise ValueError("Tracking FPS เลือกได้เฉพาะ 30, 60, 90 หรือ 120")
         if not 0.5 <= recovery_initial <= 10 or not 2 <= recovery_max <= 60 or recovery_max < recovery_initial:
             raise ValueError("เวลาพัก Recovery ต้องเริ่ม 0.5–10 วินาที และเวลาสูงสุด 2–60 วินาที โดยต้องไม่น้อยกว่าเวลาเริ่มต้น")
         s.update({
@@ -429,6 +451,8 @@ class FishingAutoBotV5:
             "repeat_fishing": True,
             "tracking_deadband_ratio": deadband_percent / 100.0,
             "tracking_lookahead_seconds": lookahead,
+            "tracking_fps": tracking_fps,
+            "progress_poll_interval": 0.05,
             "poll_interval": poll_ms / 1000.0,
             "recovery_enabled": bool(self.recovery_enabled_var.get()),
             "recovery_initial_seconds": recovery_initial,
@@ -718,6 +742,12 @@ class FishingAutoBotV5:
                     if "progress" in payload:
                         value = payload["progress"]
                         self.progress_var.set("Progress: ไม่พบ" if value is None else f"Progress: {value * 100:.1f}%")
+                    if "tracking_fps" in payload:
+                        value = float(payload["tracking_fps"])
+                        target = int(payload.get("tracking_target_fps", 120))
+                        self.tracking_fps_status_var.set(f"Tracking: {value:.1f}/{target} FPS")
+                    if "tracking_ms" in payload:
+                        self.tracking_latency_status_var.set(f"Frame: {float(payload[\"tracking_ms\"]):.2f} ms")
                 elif kind == "round":
                     self.round_var.set(f"สำเร็จ {payload.get('count', 0)} รอบ")
                 elif kind == "status":
